@@ -13,13 +13,13 @@ VERIFY_TOKEN = "latiendita123"
 
 # 2. Token de acceso de WhatsApp (Empieza por EAAG...)
 # Recuerda: Si es temporal dura 24h, lo ideal es configurar uno permanente.
-WHATSAPP_TOKEN = "TU_TOKEN_LARGO_AQUI"
+WHATSAPP_TOKEN = "e75a940523d999f625aa33c4bc7bc749"
 
 # 3. ID del número de teléfono (Lo sacas de Developers > WhatsApp > API Setup)
-PHONE_NUMBER_ID = "TU_ID_NUMERO_AQUI"
+PHONE_NUMBER_ID = "894754883714748"
 
 # 4. Número del humano para atención (Ej: 56912345678)
-NUMERO_HUMANO = "569XXXXXXXX"
+NUMERO_HUMANO = "56937057680"
 
 # 5. Nombres EXACTOS de tus plantillas (Tal cual salen en tu administrador)
 TEMPLATE_BIENVENIDA = "respond_bienvenida"
@@ -140,27 +140,26 @@ def webhook():
                     btn_text = message["interactive"]["button_reply"]["title"]
                     print(f"Botón presionado: {btn_text}")
 
-                    # --- LÓGICA DE BOTONES ---
+                    # --- LÓGICA DE BOTONES (Orden Importante) ---
                     
-                    # 1. Opción: HACER UN PEDIDO
-                    if "Pedido" in btn_text: 
-                        send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
-
-                    # 2. Opción: PREGUNTA
-                    elif "pregunta" in btn_text:
-                        send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
-
-                    # 3. Opción: ATENCIÓN / HUMANO (Menú Principal)
-                    elif "Atención" in btn_text or "Humano" in btn_text:
-                        # Envía la plantilla intermedia ("Escribe tu duda o presiona volver")
-                        send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
-
-                    # 4. Opción: HABLAR CON UN HUMANO (Sub-menú de la plantilla de atención)
-                    # Si tienes un botón específico dentro de la plantilla de atención que dice "Hablar con un Humano"
-                    # y quieres que ese botón envíe el link directo:
-                    if btn_text == "Hablar con un Humano":
+                    # 1. Opción: HABLAR CON UN HUMANO (Sub-menú - Prioridad Alta)
+                    # Buscamos "Hablar" para diferenciarlo del botón de menú "Atención de un Humano"
+                    if "Hablar" in btn_text:
                          msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
                          send_whatsapp_text(phone_number, msg)
+                    
+                    # 2. Opción: ATENCIÓN / HUMANO (Menú Principal)
+                    # Si no dice "Hablar" pero dice "Atención" o "Humano", mandamos la plantilla
+                    elif "Atención" in btn_text or "Humano" in btn_text:
+                        send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
+
+                    # 3. Opción: HACER UN PEDIDO
+                    elif "Pedido" in btn_text: 
+                        send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
+
+                    # 4. Opción: PREGUNTA
+                    elif "pregunta" in btn_text:
+                        send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
 
                     # 5. Opción: VOLVER
                     elif "Volver" in btn_text:
