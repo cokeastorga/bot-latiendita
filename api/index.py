@@ -5,26 +5,16 @@ import os
 app = Flask(__name__)
 
 # ==============================================================================
-# ⚙️ CONFIGURACIÓN (Rellena esto con tus datos)
+# ⚙️ CONFIGURACIÓN SEGURA (Variables de Entorno)
 # ==============================================================================
 
+# Leemos las claves desde el servidor (Vercel) o archivo .env
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+NUMERO_HUMANO = os.environ.get("NUMERO_HUMANO")
 
-# ID del número de WhatsApp Cloud API (ej: 123456789012345)
-WHATSAPP_BUSINESS_ACCOUNT_ID="1466982482101046"
-
-VERIFY_TOKEN = "latiendita123" 
-
-# 2. Token de acceso de WhatsApp (Empieza por EAAG...)
-# Recuerda: Si es temporal dura 24h, lo ideal es configurar uno permanente.
-WHATSAPP_TOKEN = "EAAV0DLYkZAHABQLP7rWsEuT9qH9pNYgEhQuTOciZANwdPDmMzWBmMDcDoBxA19ZBfoWJSKzq3UYOOnzYxONgzEm2ujVXlItn6veoWueTphJtysmANIvaQJGQZA0TmZCscLCHVZC0MMN3Yyf2ZCMZAsWcXa6FJpZAn7uTbAerwJAtuj3KxZBItDXqMcQB0aySJXtFYV55FJ5AMSvYXrdL7OQNzHQdkzKfKFMvKVOM01nzDC"
-
-# 3. ID del número de teléfono (Lo sacas de Developers > WhatsApp > API Setup)
-PHONE_NUMBER_ID = "894754883714748"
-
-# 4. Número del humano para atención (Ej: 56912345678)
-NUMERO_HUMANO = "56937057680"
-
-# 5. Nombres EXACTOS de tus plantillas (Tal cual salen en tu administrador)
+# Nombres de tus plantillas (Tal cual salen en tu administrador de Meta)
 TEMPLATE_BIENVENIDA = "respond_bienvenida"
 TEMPLATE_PEDIDO = "respond_pedido"
 TEMPLATE_PREGUNTA = "respond_question"
@@ -48,12 +38,11 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
         "type": "template",
         "template": {
             "name": template_name,
-            # IMPORTANTE: Cambia "es_CL" si tu plantilla está en otro idioma (es, es_AR, etc)
-            "language": {"code": "es_CL"} 
+            "language": {"code": "es_CL"} # Ajusta si tu plantilla es 'es' o 'es_AR'
         }
     }
 
-    # Si la plantilla es la de Bienvenida, inyectamos el nombre {{1}}
+    # Inyección de variable {{1}} para el nombre en la bienvenida
     if user_name and template_name == TEMPLATE_BIENVENIDA:
         data["template"]["components"] = [
             {
@@ -64,7 +53,8 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
 
     try:
         response = requests.post(url, json=data, headers=headers)
-        print(f"Enviando plantilla {template_name}: {response.status_code}")
+        if response.status_code != 200:
+            print(f"Error Meta: {response.text}")
     except Exception as e:
         print(f"Error enviando mensaje: {e}")
 
@@ -81,7 +71,10 @@ def send_whatsapp_text(phone_number, text):
         "type": "text",
         "text": {"body": text}
     }
-    requests.post(url, json=data, headers=headers)
+    try:
+        requests.post(url, json=data, headers=headers)
+    except Exception as e:
+        print(f"Error enviando texto: {e}")
 
 # ==============================================================================
 # 🧠 EL CEREBRO DEL BOT (WEBHOOK)
@@ -89,7 +82,7 @@ def send_whatsapp_text(phone_number, text):
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
-    """Verificación inicial de Facebook"""
+    """Verificación inicial de Facebook para conectar el webhook"""
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
@@ -107,64 +100,76 @@ def webhook():
     body = request.json
     
     try:
-        # Verificamos si es un mensaje válido de WhatsApp
+        # Verificamos si es un evento de mensaje
         if body.get("object") == "whatsapp_business_account":
             entry = body["entry"][0]
             changes = entry["changes"][0]
             value = changes["value"]
             
-            # Solo procesamos si hay mensajes
+            # Solo procesamos si hay mensajes nuevos
             if "messages" in value:
                 message = value["messages"][0]
                 phone_number = message["from"]
                 msg_type = message["type"]
                 
-                # Intentamos sacar el nombre del perfil, si falla usamos "Cliente"
+                # Intentamos obtener el nombre del usuario
                 try:
                     user_name = value["contacts"][0]["profile"]["name"]
                 except:
-                    user_name = "Amante del Pan"
+                    user_name = "Cliente"
 
                 # ------------------------------------------------------
-                # CASO 1: El usuario escribió Texto (ej: "Hola")
+                # CASO 1: El usuario escribió Texto
                 # ------------------------------------------------------
                 if msg_type == "text":
                     text_body = message["text"]["body"].lower()
-                    palabras_clave = ["hola", "buen", "inicio", "menu", "menú", "volver"]
                     
-                    if any(p in text_body for p in palabras_clave):
-                        send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+                    # 🟢 DETECCIÓN DE PEDIDO WEB 🟢
+                    # Si el mensaje viene de la web (contiene "pedido web" o "quiero confirmar")
+                    if "pedido web" in text_body or "quiero confirmar" in text_body:
+                        
+                        # 1. Enviar confirmación automática
+                        msg_confirmacion = (
+                            f"¡Hola {user_name}! 👋\n"
+                            f"✅ Hemos recibido el detalle de tu pedido Web.\n\n"
+                            f"Un humano 🙋‍♂️ revisará el stock y te escribirá en breve para coordinar el pago y la entrega.\n"
+                            f"¡Gracias por elegir Delicias Porteñas!"
+                        )
+                        send_whatsapp_text(phone_number, msg_confirmacion)
+                        
+                        # (Opcional) Si quieres disparar el menú principal también, descomenta esto:
+                        # send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+
+                    # 🟢 LÓGICA ESTÁNDAR (Saludos, Menú) 🟢
+                    else:
+                        palabras_clave = ["hola", "buen", "inicio", "menu", "menú", "volver", "alo", "buenas"]
+                        if any(p in text_body for p in palabras_clave):
+                            send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
 
                 # ------------------------------------------------------
                 # CASO 2: El usuario presionó un BOTÓN
                 # ------------------------------------------------------
                 elif msg_type == "interactive":
-                    # Obtenemos el TEXTO del botón presionado
                     btn_text = message["interactive"]["button_reply"]["title"]
-                    print(f"Botón presionado: {btn_text}")
-
-                    # --- LÓGICA DE BOTONES (Orden Importante) ---
                     
-                    # 1. Opción: HABLAR CON UN HUMANO (Sub-menú - Prioridad Alta)
-                    # Buscamos "Hablar" para diferenciarlo del botón de menú "Atención de un Humano"
+                    # 1. Botón "Hablar con humano"
                     if "Hablar" in btn_text:
                          msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
                          send_whatsapp_text(phone_number, msg)
                     
-                    # 2. Opción: ATENCIÓN / HUMANO (Menú Principal)
-                    # Si no dice "Hablar" pero dice "Atención" o "Humano", mandamos la plantilla
+                    # 2. Botón "Atención" o "Humano"
                     elif "Atención" in btn_text or "Humano" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
 
-                    # 3. Opción: HACER UN PEDIDO
+                    # 3. Botón "Hacer Pedido"
                     elif "Pedido" in btn_text: 
                         send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
 
-                    # 4. Opción: PREGUNTA
+                    # 4. Botón "Pregunta"
                     elif "pregunta" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
 
-                    # 5. Opción: VOLVER
+                    # 5. Botón "Volver al inicio"
                     elif "Volver" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
 
@@ -174,6 +179,6 @@ def webhook():
 
     return "EVENT_RECEIVED", 200
 
-# Para correr en local si fuera necesario
+# Para correr en local
 if __name__ == '__main__':
     app.run(debug=True)
