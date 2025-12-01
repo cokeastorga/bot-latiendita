@@ -8,12 +8,15 @@ app = Flask(__name__)
 # ⚙️ CONFIGURACIÓN (Rellena esto con tus datos)
 # ==============================================================================
 
-# 1. Tu contraseña inventada para verificar el Webhook
+
+# ID del número de WhatsApp Cloud API (ej: 123456789012345)
+WHATSAPP_BUSINESS_ACCOUNT_ID="1466982482101046"
+
 VERIFY_TOKEN = "latiendita123" 
 
 # 2. Token de acceso de WhatsApp (Empieza por EAAG...)
 # Recuerda: Si es temporal dura 24h, lo ideal es configurar uno permanente.
-WHATSAPP_TOKEN = "e75a940523d999f625aa33c4bc7bc749"
+WHATSAPP_TOKEN = "EAAV0DLYkZAHABQLP7rWsEuT9qH9pNYgEhQuTOciZANwdPDmMzWBmMDcDoBxA19ZBfoWJSKzq3UYOOnzYxONgzEm2ujVXlItn6veoWueTphJtysmANIvaQJGQZA0TmZCscLCHVZC0MMN3Yyf2ZCMZAsWcXa6FJpZAn7uTbAerwJAtuj3KxZBItDXqMcQB0aySJXtFYV55FJ5AMSvYXrdL7OQNzHQdkzKfKFMvKVOM01nzDC"
 
 # 3. ID del número de teléfono (Lo sacas de Developers > WhatsApp > API Setup)
 PHONE_NUMBER_ID = "894754883714748"
