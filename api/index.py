@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, url_for
 import requests
 import os
 
@@ -15,7 +15,6 @@ PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 NUMERO_HUMANO = os.environ.get("NUMERO_HUMANO")
 
 # Nombres de tus plantillas (Tal cual salen en tu administrador de Meta)
-# ✅ CORREGIDO SEGÚN TUS CAPTURAS:
 TEMPLATE_BIENVENIDA = "delicias_bienvenida_menu"
 TEMPLATE_PEDIDO = "respond_pedido"
 TEMPLATE_PREGUNTA = "respond_question"
@@ -33,6 +32,7 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
         "Content-Type": "application/json"
     }
     
+    # Estructura base del mensaje
     data = {
         "messaging_product": "whatsapp",
         "to": phone_number,
@@ -42,6 +42,33 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
             "language": {"code": "es_CL"} # Ajusta a 'es' o 'es_AR' si en Meta no dice 'es_CL'
         }
     }
+
+    # 🟢 CORRECCIÓN: Inyección de IMAGEN LOCAL para la Bienvenida
+    # Generamos un link público automático a tu archivo en /api/static/logo.png
+    if template_name == TEMPLATE_BIENVENIDA:
+        # url_for crea: https://tu-proyecto.vercel.app/static/logo.png
+        # _external=True asegura que incluya el dominio completo
+        # _scheme='https' fuerza a que sea seguro (requerido por Meta)
+        try:
+            image_url = url_for('static', filename='logo.png', _external=True, _scheme='https')
+        except:
+            # Fallback por si acaso falla la generación local (útil para pruebas)
+            image_url = "https://images.unsplash.com/photo-1555507036-ab1f4038808a"
+
+        data["template"]["components"] = [
+            {
+                "type": "header",
+                "parameters": [
+                    {
+                        "type": "image",
+                        "image": {
+                            "link": image_url
+                        }
+                    }
+                ]
+            }
+        ]
+        print(f"🖼️ Imagen inyectada: {image_url}")
 
     # Debug: Imprimimos qué estamos intentando enviar
     print(f"📤 Intentando enviar plantilla '{template_name}' a {phone_number}...")
