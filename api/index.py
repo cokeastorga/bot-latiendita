@@ -43,25 +43,16 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
         }
     }
 
-    # NOTA: Hemos desactivado la inyección de nombre para evitar errores,
-    # ya que tu plantilla "delicias_bienvenida_menu" parece ser texto fijo.
-    # Si en el futuro agregas "{{1}}" en Meta, descomenta las líneas de abajo 
-    # y asegúrate de respetar la indentación (4 espacios).
-    
-    # if user_name and template_name == TEMPLATE_BIENVENIDA:
-    #     data["template"]["components"] = [
-    #         {
-    #             "type": "body",
-    #             "parameters": [{"type": "text", "text": user_name}]
-    #         }
-    #     ]
+    # Debug: Imprimimos qué estamos intentando enviar
+    print(f"📤 Intentando enviar plantilla '{template_name}' a {phone_number}...")
 
     try:
         response = requests.post(url, json=data, headers=headers)
+        print(f"📬 Respuesta Meta Status: {response.status_code}")
         if response.status_code != 200:
-            print(f"Error Meta: {response.text}")
+            print(f"❌ Error Meta Body: {response.text}")
     except Exception as e:
-        print(f"Error enviando mensaje: {e}")
+        print(f"❌ Error enviando mensaje (Excepción): {e}")
 
 def send_whatsapp_text(phone_number, text):
     """Envía un mensaje de texto simple"""
@@ -76,14 +67,26 @@ def send_whatsapp_text(phone_number, text):
         "type": "text",
         "text": {"body": text}
     }
+    
+    # Debug
+    print(f"📤 Intentando enviar texto a {phone_number}...")
+
     try:
-        requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=data, headers=headers)
+        print(f"📬 Respuesta Meta Status: {response.status_code}")
+        if response.status_code != 200:
+             print(f"❌ Error Meta Body: {response.text}")
     except Exception as e:
-        print(f"Error enviando texto: {e}")
+        print(f"❌ Error enviando texto: {e}")
 
 # ==============================================================================
 # 🧠 EL CEREBRO DEL BOT (WEBHOOK)
 # ==============================================================================
+
+@app.route('/', methods=['GET'])
+def home():
+    """Página de inicio para evitar errores 404 en el navegador"""
+    return "🤖 El Bot de La Tiendita está ACTIVO y funcionando. Ve a WhatsApp.", 200
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -123,17 +126,17 @@ def webhook():
                 except:
                     user_name = "Cliente"
 
+                print(f"📥 Mensaje recibido de {user_name} ({phone_number}): Tipo {msg_type}")
+
                 # ------------------------------------------------------
                 # CASO 1: El usuario escribió Texto
                 # ------------------------------------------------------
                 if msg_type == "text":
                     text_body = message["text"]["body"].lower()
+                    print(f"📝 Texto recibido: {text_body}")
                     
                     # 🟢 DETECCIÓN DE PEDIDO WEB 🟢
-                    # Si el mensaje viene de la web (contiene "pedido web" o "quiero confirmar")
                     if "pedido web" in text_body or "quiero confirmar" in text_body:
-                        
-                        # 1. Enviar confirmación automática
                         msg_confirmacion = (
                             f"¡Hola {user_name}! 👋\n"
                             f"✅ Hemos recibido el detalle de tu pedido Web.\n\n"
@@ -142,44 +145,42 @@ def webhook():
                         )
                         send_whatsapp_text(phone_number, msg_confirmacion)
                         
-                        # (Opcional) Si quieres disparar el menú principal también, descomenta esto:
-                        # send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
-
                     # 🟢 LÓGICA ESTÁNDAR (Saludos, Menú) 🟢
                     else:
                         palabras_clave = ["hola", "buen", "inicio", "menu", "menú", "volver", "alo", "buenas"]
                         if any(p in text_body for p in palabras_clave):
+                            print("✅ Palabra clave detectada. Enviando bienvenida...")
                             send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+                        else:
+                            print("⚠️ Mensaje de texto sin palabra clave conocida. Ignorando.")
 
                 # ------------------------------------------------------
                 # CASO 2: El usuario presionó un BOTÓN
                 # ------------------------------------------------------
                 elif msg_type == "interactive":
                     btn_text = message["interactive"]["button_reply"]["title"]
+                    print(f"🔘 Botón presionado: {btn_text}")
                     
-                    # 1. Botón "Hablar con humano" (Link a WhatsApp personal)
                     if "Hablar" in btn_text:
                          msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
                          send_whatsapp_text(phone_number, msg)
                     
-                    # 2. Botón "Atención" o "Humano" (Menú de espera)
                     elif "Atención" in btn_text or "Humano" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
 
-                    # 3. Botón "Hacer Pedido" (Instrucciones Web)
                     elif "Pedido" in btn_text: 
                         send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
 
-                    # 4. Botón "Pregunta" (Info general)
                     elif "pregunta" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
 
-                    # 5. Botón "Volver al inicio"
                     elif "Volver" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+                    else:
+                        print(f"⚠️ Botón desconocido: {btn_text}")
 
     except Exception as e:
-        print(f"Error en el webhook: {e}")
+        print(f"❌ Error CRÍTICO en el webhook: {e}")
         return "Error", 500
 
     return "EVENT_RECEIVED", 200
