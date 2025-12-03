@@ -182,29 +182,41 @@ def webhook():
                             print("⚠️ Mensaje de texto sin palabra clave conocida. Ignorando.")
 
                 # ------------------------------------------------------
-                # CASO 2: El usuario presionó un BOTÓN
+                # CASO 2: El usuario presionó un BOTÓN (Cualquier tipo)
                 # ------------------------------------------------------
-                elif msg_type == "interactive":
-                    btn_text = message["interactive"]["button_reply"]["title"]
-                    print(f"🔘 Botón presionado: {btn_text}")
+                else:
+                    btn_text = None
                     
-                    if "Hablar" in btn_text:
-                         msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
-                         send_whatsapp_text(phone_number, msg)
+                    # Tipo 1: Interactive (Botones de lista o respuestas rápidas estándar)
+                    if msg_type == "interactive":
+                        btn_text = message["interactive"]["button_reply"]["title"]
                     
-                    elif "Atención" in btn_text or "Humano" in btn_text:
-                        send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
+                    # Tipo 2: Button (Botones dentro de Plantillas/Templates)
+                    elif msg_type == "button":
+                        btn_text = message["button"]["text"]
 
-                    elif "Pedido" in btn_text: 
-                        send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
+                    if btn_text:
+                        print(f"🔘 Botón presionado: {btn_text}")
+                        
+                        if "Hablar" in btn_text:
+                            msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
+                            send_whatsapp_text(phone_number, msg)
+                        
+                        elif "Atención" in btn_text or "Humano" in btn_text:
+                            send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
 
-                    elif "pregunta" in btn_text:
-                        send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
+                        elif "Pedido" in btn_text: 
+                            send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
 
-                    elif "Volver" in btn_text:
-                        send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+                        elif "pregunta" in btn_text:
+                            send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
+
+                        elif "Volver" in btn_text:
+                            send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+                        else:
+                            print(f"⚠️ Botón desconocido: {btn_text}")
                     else:
-                        print(f"⚠️ Botón desconocido: {btn_text}")
+                         print(f"⚠️ Tipo de mensaje no manejado: {msg_type}")
 
     except Exception as e:
         print(f"❌ Error CRÍTICO en el webhook: {e}")
