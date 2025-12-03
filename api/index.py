@@ -45,15 +45,16 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
 
     # NOTA: Hemos desactivado la inyección de nombre para evitar errores,
     # ya que tu plantilla "delicias_bienvenida_menu" parece ser texto fijo.
-    # Si en el futuro agregas "{{1}}" en Meta, descomenta las líneas de abajo:
+    # Si en el futuro agregas "{{1}}" en Meta, descomenta las líneas de abajo 
+    # y asegúrate de respetar la indentación (4 espacios).
     
-     if user_name and template_name == TEMPLATE_BIENVENIDA:
-         data["template"]["components"] = [
-            {
-                "type": "body",
-             "parameters": [{"type": "text", "text": user_name}]
-         }
-         ]
+    # if user_name and template_name == TEMPLATE_BIENVENIDA:
+    #     data["template"]["components"] = [
+    #         {
+    #             "type": "body",
+    #             "parameters": [{"type": "text", "text": user_name}]
+    #         }
+    #     ]
 
     try:
         response = requests.post(url, json=data, headers=headers)
