@@ -15,10 +15,11 @@ PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 NUMERO_HUMANO = os.environ.get("NUMERO_HUMANO")
 
 # Nombres de tus plantillas (Tal cual salen en tu administrador de Meta)
-TEMPLATE_BIENVENIDA = "respond_bienvenida"
+# ✅ CORREGIDO SEGÚN TUS CAPTURAS:
+TEMPLATE_BIENVENIDA = "delicias_bienvenida_menu"
 TEMPLATE_PEDIDO = "respond_pedido"
 TEMPLATE_PREGUNTA = "respond_question"
-TEMPLATE_ATENCION = "responde_atencion_clie"
+TEMPLATE_ATENCION = "responde_atencion_cliente"
 
 # ==============================================================================
 # 🛠️ FUNCIONES DE AYUDA
@@ -38,18 +39,21 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
         "type": "template",
         "template": {
             "name": template_name,
-            "language": {"code": "es_CL"} # Ajusta si tu plantilla es 'es' o 'es_AR'
+            "language": {"code": "es_CL"} # Ajusta a 'es' o 'es_AR' si en Meta no dice 'es_CL'
         }
     }
 
-    # Inyección de variable {{1}} para el nombre en la bienvenida
-    if user_name and template_name == TEMPLATE_BIENVENIDA:
-        data["template"]["components"] = [
+    # NOTA: Hemos desactivado la inyección de nombre para evitar errores,
+    # ya que tu plantilla "delicias_bienvenida_menu" parece ser texto fijo.
+    # Si en el futuro agregas "{{1}}" en Meta, descomenta las líneas de abajo:
+    
+     if user_name and template_name == TEMPLATE_BIENVENIDA:
+         data["template"]["components"] = [
             {
                 "type": "body",
-                "parameters": [{"type": "text", "text": user_name}]
-            }
-        ]
+             "parameters": [{"type": "text", "text": user_name}]
+         }
+         ]
 
     try:
         response = requests.post(url, json=data, headers=headers)
@@ -152,20 +156,20 @@ def webhook():
                 elif msg_type == "interactive":
                     btn_text = message["interactive"]["button_reply"]["title"]
                     
-                    # 1. Botón "Hablar con humano"
+                    # 1. Botón "Hablar con humano" (Link a WhatsApp personal)
                     if "Hablar" in btn_text:
                          msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
                          send_whatsapp_text(phone_number, msg)
                     
-                    # 2. Botón "Atención" o "Humano"
+                    # 2. Botón "Atención" o "Humano" (Menú de espera)
                     elif "Atención" in btn_text or "Humano" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
 
-                    # 3. Botón "Hacer Pedido"
+                    # 3. Botón "Hacer Pedido" (Instrucciones Web)
                     elif "Pedido" in btn_text: 
                         send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
 
-                    # 4. Botón "Pregunta"
+                    # 4. Botón "Pregunta" (Info general)
                     elif "pregunta" in btn_text:
                         send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
 
