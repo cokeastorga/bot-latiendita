@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, url_for
 import requests
 import os
+import json  # ✅ FALTABA ESTA IMPORTACIÓN
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
@@ -8,47 +9,71 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ==============================================================================
-# 🔥 INICIALIZACIÓN FIREBASE (Para que el Dashboard vea los datos)
+# 🔥 INICIALIZACIÓN FIREBASE (CORREGIDA PARA VERCEL)
 # ==============================================================================
-# En Vercel, pasaremos las credenciales como variables de entorno o archivo json
-# Si estás en local, asegúrate de tener tu serviceAccountKey.json
 if not firebase_admin._apps:
-    # Opción A: Usando diccionario desde variable de entorno (Recomendado para Vercel)
-    # cred = credentials.Certificate(json.loads(os.environ.get('FIREBASE_CREDENTIALS')))
+    # Intentamos cargar la credencial JSON desde la variable de entorno
+    firebase_creds = os.environ.get('FIREBASE_CREDENTIALS')
     
-    # Opción B: Inicialización por defecto (si Vercel tiene configurado Google Cloud)
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred, {'projectId': os.environ.get("FIREBASE_PROJECT_ID")})
+    if firebase_creds:
+        # ✅ MODO PRODUCCIÓN (VERCEL)
+        try:
+            # Si viene como string JSON, lo parseamos
+            cred_dict = json.loads(firebase_creds)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase inicializado con FIREBASE_CREDENTIALS")
+        except Exception as e:
+            print(f"❌ Error cargando FIREBASE_CREDENTIALS: {e}")
+            # Fallback por si el JSON está mal, intentamos default (aunque probablemente falle)
+            try:
+                cred = credentials.ApplicationDefault()
+                firebase_admin.initialize_app(cred)
+            except:
+                pass
+    else:
+        # ⚠️ MODO LOCAL / GOOGLE CLOUD (Fallback)
+        print("⚠️ No se encontró FIREBASE_CREDENTIALS, intentando ApplicationDefault...")
+        try:
+            cred = credentials.ApplicationDefault()
+            project_id = os.environ.get("FIREBASE_PROJECT_ID")
+            if project_id:
+                firebase_admin.initialize_app(cred, {'projectId': project_id})
+            else:
+                firebase_admin.initialize_app(cred)
+        except Exception as e:
+            print(f"❌ Error inicializando Firebase: {e}")
 
+# Instancia de la base de datos
 db = firestore.client()
 
 # ==============================================================================
-# ⚙️ CONFIGURACIÓN SEGURA (Variables de Entorno)
+# ⚙️ VARIABLES DE ENTORNO
 # ==============================================================================
-
-# Leemos las claves desde el servidor (Vercel) o archivo .env
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 NUMERO_HUMANO = os.environ.get("NUMERO_HUMANO")
 
-# Nombres de tus plantillas (Tal cual salen en tu administrador de Meta)
+# Plantillas
 TEMPLATE_BIENVENIDA = "delicias_bienvenida_menu"
 TEMPLATE_PEDIDO = "respond_pedido"
 TEMPLATE_PREGUNTA = "respond_question"
 TEMPLATE_ATENCION = "responde_atencion_cliente"
 
-
+# ==============================================================================
+# 💾 LOG DE CONVERSACIÓN (FIRESTORE)
+# ==============================================================================
 def log_conversation(phone_number, direction, text, type="text"):
-    """
-    Guarda el mensaje en Firestore para que el Dashboard Svelte lo vea.
-    Estructura compatible con: src/lib/chatbot/store.ts
-    """
     try:
+        if not db:
+            print("⚠️ DB no inicializada, saltando log.")
+            return
+
         conv_id = f"wa:{phone_number}"
         conv_ref = db.collection('conversations').document(conv_id)
         
-        # 1. Crear documento de conversación si no existe
+        # 1. Crear doc si no existe
         if not conv_ref.get().exists:
             conv_ref.set({
                 'channel': 'whatsapp',
@@ -58,7 +83,7 @@ def log_conversation(phone_number, direction, text, type="text"):
                 'updatedAt': firestore.SERVER_TIMESTAMP
             })
 
-        # 2. Agregar mensaje a la subcolección
+        # 2. Guardar mensaje
         conv_ref.collection('messages').add({
             'from': 'user' if direction == 'inbound' else 'bot',
             'direction': 'in' if direction == 'inbound' else 'out',
@@ -67,80 +92,56 @@ def log_conversation(phone_number, direction, text, type="text"):
             'type': type
         })
 
-        # 3. Actualizar último mensaje
+        # 3. Update timestamps
         conv_ref.update({
             'lastMessageText': text,
             'lastMessageAt': firestore.SERVER_TIMESTAMP,
             'updatedAt': firestore.SERVER_TIMESTAMP
         })
-        print(f"✅ Log guardado en Firestore: {text}")
+        print(f"✅ Log guardado: {text[:20]}...")
     except Exception as e:
         print(f"❌ Error guardando en Firestore: {e}")
 
 # ==============================================================================
-# 🛠️ FUNCIONES DE AYUDA
+# 🛠️ ENVÍO WHATSAPP
 # ==============================================================================
-
 def send_whatsapp_template(phone_number, template_name, user_name=None):
-    """Envía una plantilla pre-aprobada de Facebook"""
     url = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
-    
-    # Estructura base del mensaje
     data = {
         "messaging_product": "whatsapp",
         "to": phone_number,
         "type": "template",
         "template": {
             "name": template_name,
-            "language": {"code": "es_CL"} # Ajusta a 'es' o 'es_AR' si en Meta no dice 'es_CL'
+            "language": {"code": "es_CL"}
         }
     }
 
-    # 🟢 CORRECCIÓN: Inyección de IMAGEN LOCAL para la Bienvenida
-    # Generamos un link público automático a tu archivo en /api/static/logo.png
+    # Inyección de imagen para bienvenida
     if template_name == TEMPLATE_BIENVENIDA:
-        # url_for crea: https://tu-proyecto.vercel.app/static/logo.png
-        # _external=True asegura que incluya el dominio completo
-        # _scheme='https' fuerza a que sea seguro (requerido por Meta)
         try:
             image_url = url_for('static', filename='logo.png', _external=True, _scheme='https')
         except:
-            # Fallback por si acaso falla la generación local (útil para pruebas)
             image_url = "https://images.unsplash.com/photo-1555507036-ab1f4038808a"
 
-        data["template"]["components"] = [
-            {
-                "type": "header",
-                "parameters": [
-                    {
-                        "type": "image",
-                        "image": {
-                            "link": image_url
-                        }
-                    }
-                ]
-            }
-        ]
-        print(f"🖼️ Imagen inyectada: {image_url}")
+        data["template"]["components"] = [{
+            "type": "header",
+            "parameters": [{"type": "image", "image": {"link": image_url}}]
+        }]
 
-    # Debug: Imprimimos qué estamos intentando enviar
-    print(f"📤 Intentando enviar plantilla '{template_name}' a {phone_number}...")
+    # Logueamos la salida ANTES de enviar (optimistic)
     log_conversation(phone_number, 'outbound', f"[Plantilla: {template_name}]", "template")
 
     try:
-        response = requests.post(url, json=data, headers=headers)
-        print(f"📬 Respuesta Meta Status: {response.status_code}")
-        if response.status_code != 200:
-            print(f"❌ Error Meta Body: {response.text}")
+        requests.post(url, json=data, headers=headers)
     except Exception as e:
-        print(f"❌ Error enviando mensaje (Excepción): {e}")
+        print(f"❌ Error request Meta: {e}")
 
 def send_whatsapp_text(phone_number, text):
-    """Envía un mensaje de texto simple"""
     url = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
@@ -153,30 +154,25 @@ def send_whatsapp_text(phone_number, text):
         "text": {"body": text}
     }
     
-    # Debug
-    print(f"📤 Intentando enviar texto a {phone_number}...")
-log_conversation(phone_number, 'outbound', text, "text")
+    # Logueamos
+    log_conversation(phone_number, 'outbound', text, "text")
 
     try:
-        response = requests.post(url, json=data, headers=headers)
-        print(f"📬 Respuesta Meta Status: {response.status_code}")
-        if response.status_code != 200:
-             print(f"❌ Error Meta Body: {response.text}")
+        requests.post(url, json=data, headers=headers)
     except Exception as e:
-        print(f"❌ Error enviando texto: {e}")
+        print(f"❌ Error request Meta: {e}")
 
 # ==============================================================================
-# 🧠 EL CEREBRO DEL BOT (WEBHOOK)
+# 🌐 RUTAS FLASK
 # ==============================================================================
 
 @app.route('/', methods=['GET'])
 def home():
-    """Página de inicio para evitar errores 404 en el navegador"""
-    return "🤖 El Bot de La Tiendita está ACTIVO y funcionando. Ve a WhatsApp.", 200
+    return "🤖 Bot Online", 200
 
+# IMPORTANTE: Misma ruta para GET (verify) y POST (webhook)
 @app.route('/api/webhook', methods=['GET'])
 def verify_webhook():
-    """Verificación inicial de Facebook para conectar el webhook"""
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
@@ -186,154 +182,91 @@ def verify_webhook():
             return challenge, 200
         else:
             return 'Forbidden', 403
-    return 'Hola, el bot está activo', 200
-
-# ==============================================================================
-# 🧪 ENDPOINT PARA EL SANDBOX (SIMULADOR)
-# ==============================================================================
-
-@app.route('/api/sandbox', methods=['POST'])
-def sandbox_chat():
-    """Simula la interacción del chat para el panel de control"""
-    data = request.json
-    text_body = data.get('text', '').lower()
-    user_id = data.get('conversationId', 'sandbox-user')
-    
-    # 1. Loguear lo que el usuario "escribió" en el simulador
-    log_conversation(user_id, 'inbound', text_body)
-    
-    reply = ""
-    intent_id = "unknown"
-    
-    # --- REPLICAMOS TU LÓGICA DE NEGOCIO AQUÍ ---
-    # Esto asegura que el simulador responda igual que WhatsApp
-    
-    # A) Lógica de Pedido Web
-    if "pedido web" in text_body or "quiero confirmar" in text_body:
-        intent_id = "order_web"
-        reply = (
-            "¡Hola! 👋\n"
-            "✅ Hemos recibido el detalle de tu pedido Web.\n\n"
-            "Un humano 🙋‍♂️ revisará el stock y te escribirá en breve para coordinar."
-        )
-    
-    # B) Lógica de Saludos/Menú
-    elif any(p in text_body for p in ["hola", "buen", "inicio", "menu", "menú", "volver"]):
-        intent_id = "greeting"
-        reply = "[Se envía Plantilla: delicias_bienvenida_menu]" 
-        # Nota: En el sandbox devolvemos texto descriptivo porque no podemos renderizar 
-        # la plantilla de WhatsApp real en la web fácilmente.
-        
-    # C) Fallback
-    else:
-        intent_id = "fallback"
-        reply = "⚠️ Mensaje no reconocido por las reglas actuales."
-
-    # 2. Loguear la respuesta del bot
-    log_conversation(user_id, 'outbound', reply)
-    
-    return jsonify({
-        "reply": reply,
-        "intent": {"id": intent_id},
-        "nextState": "idle"
-    })
+    return 'Webhook Verificado OK', 200
 
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
-    """Recepción de mensajes"""
     body = request.json
-    
     try:
-        # Verificamos si es un evento de mensaje
         if body.get("object") == "whatsapp_business_account":
             entry = body["entry"][0]
             changes = entry["changes"][0]
             value = changes["value"]
             
-            # Solo procesamos si hay mensajes nuevos
             if "messages" in value:
                 message = value["messages"][0]
                 phone_number = message["from"]
                 msg_type = message["type"]
                 
-                # Intentamos obtener el nombre del usuario
                 try:
                     user_name = value["contacts"][0]["profile"]["name"]
                 except:
                     user_name = "Cliente"
 
-                print(f"📥 Mensaje recibido de {user_name} ({phone_number}): Tipo {msg_type}")
-
-                # ------------------------------------------------------
-                # CASO 1: El usuario escribió Texto
-                # ------------------------------------------------------
+                # 1. TEXTO
                 if msg_type == "text":
                     text_body = message["text"]["body"].lower()
                     log_conversation(phone_number, 'inbound', text_body)
-                    print(f"📝 Texto recibido: {text_body}")
                     
-                    # 🟢 DETECCIÓN DE PEDIDO WEB 🟢
                     if "pedido web" in text_body or "quiero confirmar" in text_body:
-                        msg_confirmacion = (
-                            f"¡Hola {user_name}! 👋\n"
-                            f"✅ Hemos recibido el detalle de tu pedido Web.\n\n"
-                            f"Un humano 🙋‍♂️ revisará el stock y te escribirá en breve para coordinar el pago y la entrega.\n"
-                            f"¡Gracias por elegir Delicias Porteñas!"
-                        )
-                        send_whatsapp_text(phone_number, msg_confirmacion)
-                        
-                    # 🟢 LÓGICA ESTÁNDAR (Saludos, Menú) 🟢
-                    else:
-                        palabras_clave = ["hola", "buen", "inicio", "menu", "menú", "volver", "alo", "buenas"]
-                        if any(p in text_body for p in palabras_clave):
-                            print("✅ Palabra clave detectada. Enviando bienvenida...")
-                            send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
-                        else:
-                            print("⚠️ Mensaje de texto sin palabra clave conocida. Ignorando.")
-
-                # ------------------------------------------------------
-                # CASO 2: El usuario presionó un BOTÓN (Cualquier tipo)
-                # ------------------------------------------------------
-                else:
-                    btn_text = None
-                    
-                    # Tipo 1: Interactive (Botones de lista o respuestas rápidas estándar)
+                        msg = f"¡Hola {user_name}! 👋\n✅ Recibimos tu pedido Web. Un humano te contactará pronto."
+                        send_whatsapp_text(phone_number, msg)
+                    elif any(p in text_body for p in ["hola", "buen", "inicio", "menu"]):
+                        send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
+                
+                # 2. BOTONES
+                elif msg_type in ["interactive", "button"]:
+                    btn_text = ""
                     if msg_type == "interactive":
                         btn_text = message["interactive"]["button_reply"]["title"]
-                    
-                    # Tipo 2: Button (Botones dentro de Plantillas/Templates)
                     elif msg_type == "button":
                         btn_text = message["button"]["text"]
-
+                    
                     if btn_text:
-                        print(f"🔘 Botón presionado: {btn_text}")
+                        log_conversation(phone_number, 'inbound', f"[Botón: {btn_text}]", "button")
                         
                         if "Hablar" in btn_text:
-                            msg = f"🤝 Para hablar directamente con nosotros, haz clic aquí: https://wa.me/{NUMERO_HUMANO}"
-                            send_whatsapp_text(phone_number, msg)
-                        
+                            send_whatsapp_text(phone_number, f"https://wa.me/{NUMERO_HUMANO}")
                         elif "Atención" in btn_text or "Humano" in btn_text:
                             send_whatsapp_template(phone_number, TEMPLATE_ATENCION)
-
                         elif "Pedido" in btn_text: 
                             send_whatsapp_template(phone_number, TEMPLATE_PEDIDO)
-
                         elif "pregunta" in btn_text:
                             send_whatsapp_template(phone_number, TEMPLATE_PREGUNTA)
-
                         elif "Volver" in btn_text:
                             send_whatsapp_template(phone_number, TEMPLATE_BIENVENIDA, user_name)
-                        else:
-                            print(f"⚠️ Botón desconocido: {btn_text}")
-                    else:
-                         print(f"⚠️ Tipo de mensaje no manejado: {msg_type}")
 
     except Exception as e:
-        print(f"❌ Error CRÍTICO en el webhook: {e}")
+        print(f"❌ Error webhook: {e}")
         return "Error", 500
 
     return "EVENT_RECEIVED", 200
 
-# Para correr en local
+# 🧪 SANDBOX ENDPOINT
+@app.route('/api/sandbox', methods=['POST'])
+def sandbox_chat():
+    data = request.json
+    text = data.get('text', '').lower()
+    user_id = data.get('conversationId', 'sandbox-user')
+    
+    log_conversation(user_id, 'inbound', text)
+    
+    reply = "Mensaje recibido (Sandbox)"
+    intent = "unknown"
+
+    if "pedido web" in text:
+        intent = "order_web"
+        reply = "¡Hola! 👋\n✅ Hemos recibido tu pedido Web (Simulación)."
+    elif any(p in text for p in ["hola", "menu"]):
+        intent = "greeting"
+        reply = "[Se envía Plantilla de Bienvenida]"
+    else:
+        intent = "fallback"
+        reply = "⚠️ No entendí (Sandbox)."
+
+    log_conversation(user_id, 'outbound', reply)
+    
+    return jsonify({"reply": reply, "intent": {"id": intent}, "nextState": "idle"})
+
 if __name__ == '__main__':
     app.run(debug=True)
