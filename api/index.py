@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, url_for
 import requests
 import os
-import json  # ✅ FALTABA ESTA IMPORTACIÓN
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
@@ -25,7 +25,7 @@ if not firebase_admin._apps:
             print("✅ Firebase inicializado con FIREBASE_CREDENTIALS")
         except Exception as e:
             print(f"❌ Error cargando FIREBASE_CREDENTIALS: {e}")
-            # Fallback por si el JSON está mal, intentamos default (aunque probablemente falle)
+            # Fallback por si el JSON está mal
             try:
                 cred = credentials.ApplicationDefault()
                 firebase_admin.initialize_app(cred)
