@@ -1,0 +1,8 @@
+# .gitignore
+node_modules
+.env
+.vercel
+.svelte-kit
+build
+__pycache__
+*.pyc
