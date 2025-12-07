@@ -40,7 +40,7 @@
     messages = [...messages, { from: 'user', text, ts: new Date() }];
 
     try {
-      const res = await fetch('/api/sandbox', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -48,6 +48,7 @@
         body: JSON.stringify({
           text,
           conversationId,
+          userId: conversationId,
           channel: 'web',
           locale: 'es',
           previousState: lastState // así probamos el flujo con estado
