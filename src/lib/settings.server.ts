@@ -18,6 +18,11 @@ export const defaultServerSettings: Settings = {
     ...baseDefaults.api,
     publicBaseUrl: privateEnv.PUBLIC_BASE_URL ?? baseDefaults.api.publicBaseUrl,
     webhookSecret: privateEnv.WEBHOOK_SECRET ?? baseDefaults.api.webhookSecret
+  },
+  // Aseguramos que 'flow' exista
+  flow: {
+    ...baseDefaults.flow,
+    ...(baseDefaults.flow ?? {}) 
   }
 };
 
@@ -55,11 +60,14 @@ export async function getGlobalSettings(): Promise<Settings> {
       api: {
         ...defaultServerSettings.api,
         ...(data.api ?? {})
+      },
+      flow: {
+        ...defaultServerSettings.flow,
+        ...(data.flow ?? {})
       }
     };
   } catch (err) {
     console.error('❌ Error leyendo settings desde Firestore:', err);
-    // NO lanzamos error → el webhook sigue funcionando con defaults
     return defaultServerSettings;
   }
 }

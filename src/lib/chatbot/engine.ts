@@ -1,16 +1,14 @@
 // src/lib/chatbot/engine.ts
 import {
   buildMenuResumen,
-  buscarProductoPorTexto,
-  formatearDetalleProducto
+  buscarProductoPorTexto
 } from '$lib/chatbot/catalog/productos';
 import { buildImageUrl } from '$lib/chatbot/utils/images';
 import { aiUnderstand, type AiNLUResult } from '$lib/chatbot/aiUnderstanding';
 import {
   mergeOrderDraft,
   buildProductOrderResponse,
-  type OrderDraft,
-  type DeliveryMode
+  type OrderDraft
 } from '$lib/chatbot/logic/order';
 
 export type Channel = 'whatsapp' | 'web';
@@ -29,16 +27,26 @@ export type IntentId =
 type SettingsMeta = {
   businessName?: string;
   hours?: {
-    timezone?: string;
     weekdays?: string;
     saturday?: string;
     sunday?: string;
   };
   messages?: {
     welcome?: string;
-    inactivity?: string;
     handoff?: string;
     closing?: string;
+  };
+  // Nuevo:
+  flow?: {
+    welcomeMenu?: {
+      headerText?: string;
+      options?: Array<{
+        id: string;
+        label: string;
+        replyText: string;
+        triggerIntent?: string;
+      }>;
+    };
   };
 };
 
@@ -54,7 +62,7 @@ export interface BotContext {
 
 export interface IntentMatch {
   id: IntentId;
-  confidence: number; // 0–1
+  confidence: number;
   reason: string;
 }
 
@@ -81,42 +89,42 @@ function normalize(text: string): string {
 }
 
 /**
- * Detección de intención por reglas (Rápida)
+ * Función auxiliar para detectar si el usuario seleccionó una opción del menú
+ */
+function detectMenuSelection(text: string, options: any[]): string | null {
+  const n = normalize(text);
+  // Chequear números exactos "1", "2", "3" o "opcion 1", etc.
+  if (n === '1' || n.includes('opcion 1')) return options[0]?.id;
+  if (n === '2' || n.includes('opcion 2')) return options[1]?.id;
+  if (n === '3' || n.includes('opcion 3')) return options[2]?.id;
+  
+  // Chequear coincidencia con el texto de la etiqueta
+  for (const opt of options) {
+    if (n.includes(normalize(opt.label))) return opt.id;
+  }
+  return null;
+}
+
+/**
+ * Detección de intención básica por reglas
  */
 export function detectIntent(
   text: string,
   previousState?: string | null
 ): IntentMatch {
   const normalized = normalize(text);
-  const hasAny = (keywords: string[]) =>
-    keywords.some((k) => normalized.includes(k));
+  const hasAny = (keywords: string[]) => keywords.some((k) => normalized.includes(k));
 
-  // 1. ESCAPE / SALIDA (Prioridad Máxima)
   if (hasAny(['chao', 'chau', 'adios', 'hasta luego', 'nos vemos', 'cancelar', 'salir', 'terminar', 'fin', 'cerrar'])) {
-    return {
-      id: 'goodbye',
-      confidence: 0.99,
-      reason: 'Palabra de cierre'
-    };
+    return { id: 'goodbye', confidence: 0.99, reason: 'Palabra de cierre' };
   }
 
-  // 2. Confirmación (Solo si estamos en flujo de pedido)
   if (previousState === 'collecting_order_details') {
     if (hasAny(['confirmar', 'listo', 'ok', 'estaria bien', 'ya', 'si', 'dale', 'bueno'])) {
-      return {
-        id: 'order_start',
-        confidence: 0.95,
-        reason: 'Confirmación de flujo'
-      };
+      return { id: 'order_start', confidence: 0.95, reason: 'Confirmación de flujo' };
     }
-    return {
-      id: 'order_start',
-      confidence: 0.85,
-      reason: 'Continuación de flujo'
-    };
+    return { id: 'order_start', confidence: 0.85, reason: 'Continuación de flujo' };
   }
-
-  // 3. Intenciones Generales
 
   if (hasAny(['hola', 'buenas', 'buen dia', 'buenos dias', 'buenas tardes', 'alo'])) {
     return { id: 'greeting', confidence: 0.9, reason: 'Saludo' };
@@ -130,20 +138,11 @@ export function detectIntent(
     return { id: 'order_status', confidence: 0.9, reason: 'Consulta estado' };
   }
 
-  // Horarios y Ubicación
-  if (hasAny([
-    'horario', 'abren', 'cierran', 'atienden', 'hora',
-    'ubicacion', 'ubicados', 'donde estan', 'direccion', 'sucursales', 'sucursal', 'donde queda', 'local'
-  ])) {
+  if (hasAny(['horario', 'abren', 'cierran', 'atienden', 'hora', 'ubicacion', 'ubicados', 'donde estan', 'direccion', 'local'])) {
     return { id: 'faq_hours', confidence: 0.9, reason: 'Consulta info negocio' };
   }
 
-  // Menú y Catálogo
-  const containsTorta = normalized.includes('torta') || normalized.includes('tortas');
-  if (
-    hasAny(['menu', 'carta', 'productos', 'precios', 'catalogo', 'catálogo', 'variedades', 'opciones', 'que tienen']) ||
-    (containsTorta && hasAny(['que', 'ver', 'mostrar', 'muestrame', 'hay', 'tienen']))
-  ) {
+  if (hasAny(['menu', 'carta', 'productos', 'precios', 'catalogo', 'variedades', 'opciones', 'que tienen'])) {
     return { id: 'faq_menu', confidence: 0.93, reason: 'Consulta menú' };
   }
 
@@ -159,17 +158,17 @@ export function detectIntent(
 }
 
 /**
- * Construye la respuesta final (Prioriza IA si existe)
+ * Construye la respuesta final
  */
 export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<BotResponse> {
-  const locale = ctx.locale ?? 'es';
   const isWhatsApp = ctx.channel === 'whatsapp';
-
   const settings = (((ctx.metadata ?? {}) as any).settings ?? {}) as SettingsMeta;
-  const businessName = settings.businessName ?? 'Delicias Porteñas';
+  const messages = settings.messages ?? {};
+  const hours = settings.hours ?? {};
+  const flow = settings.flow?.welcomeMenu ?? {};
+  const options = flow.options ?? [];
+  
   const lineBreak = isWhatsApp ? '\n' : '\n';
-
-  // 🧠 Recuperamos la respuesta generada por la IA (si existe)
   const aiReply = (ctx.metadata as any)?.aiGeneratedReply as string | undefined;
 
   let reply = '';
@@ -179,18 +178,19 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
 
   switch (intent.id) {
     case 'greeting': {
-      // Si la IA generó un saludo, úsalo. Si no, usa el del backend.
-      if (aiReply) {
-        reply = aiReply;
-      } else {
-        reply = settings.messages?.welcome ?? `¡Hola! 👋 Soy Edu, el asistente virtual de ${businessName}.`;
-      }
+      // ✅ MENÚ DINÁMICO: Construimos el menú desde los settings
+      const header = flow.headerText || 'Hola, elige una opción:';
+      
+      const menuList = options.map((opt: any, i: number) => 
+        `${i + 1}. ${opt.label}`
+      ).join(lineBreak);
+
+      reply = `${header}${lineBreak}${lineBreak}${menuList}`;
       nextState = 'idle';
       break;
     }
 
     case 'smalltalk': {
-      // Prioridad absoluta a la IA para charla casual
       if (aiReply) {
         reply = aiReply;
       } else {
@@ -203,7 +203,6 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
     case 'order_start': {
       const producto = buscarProductoPorTexto(ctx.text);
       const draft: OrderDraft = { producto: producto ? producto.nombre : null };
-      // Pasamos aiReply para que la lógica de pedidos pueda usarlo como intro
       return await buildProductOrderResponse(producto, draft, ctx, intent, lineBreak, aiReply);
     }
 
@@ -214,13 +213,10 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
     }
 
     case 'faq_hours': {
-      // Mantenemos respuesta "Backend" para datos duros (para evitar alucinaciones de la IA)
-      const h = settings.hours ?? {};
-      const wd = h.weekdays ?? '09:00 – 19:00';
-      const sat = h.saturday ?? '10:00 – 19:00';
-      const sun = h.sunday ?? 'Cerrado';
+      const wd = hours.weekdays || 'Consultar';
+      const sat = hours.saturday || 'Consultar';
+      const sun = hours.sunday || 'Cerrado';
 
-      // Si la IA dio una respuesta muy buena, úsala, sino, usa la plantilla segura
       if (aiReply && aiReply.length > 20) {
          reply = aiReply;
       } else {
@@ -235,7 +231,6 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
     case 'faq_menu': {
       const resumen = buildMenuResumen(4);
       const intro = aiReply ? aiReply : `Aquí tienes algunas de nuestras tortas favoritas 🍰:`;
-      
       reply = `${intro}${lineBreak}${lineBreak}${resumen}${lineBreak}${lineBreak}¿Te gustaría alguna? Solo escribe el nombre.`;
       
       nextState = ctx.previousState ?? 'idle';
@@ -244,14 +239,14 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
     }
 
     case 'handoff_human': {
-      reply = settings.messages?.handoff ?? `Entendido, voy a avisar a un ejecutivo para que te atienda personalmente. 👤`;
+      reply = messages.handoff || 'Entendido, voy a avisar a un ejecutivo para que te atienda personalmente. 👤';
       nextState = 'handoff_requested';
       needsHuman = true;
       break;
     }
 
     case 'goodbye': {
-      reply = aiReply ? aiReply : (settings.messages?.closing ?? `¡Gracias! 👋 Que tengas un excelente día.`);
+      reply = aiReply || messages.closing || '¡Gracias! 👋 Que tengas un excelente día.';
       nextState = 'ended';
       shouldClearMemory = true;
       break;
@@ -265,7 +260,6 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
         return await buildProductOrderResponse(producto, draft, ctx, intent, lineBreak, aiReply);
       }
 
-      // Si no entendemos y la IA generó algo, úsalo (Edu intentando explicar)
       if (aiReply) {
         reply = aiReply;
       } else {
@@ -283,7 +277,7 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
     needsHuman,
     meta: {
       channel: ctx.channel,
-      locale,
+      locale: ctx.locale || 'es',
       previousState: ctx.previousState ?? null
     },
     shouldClearMemory
@@ -291,19 +285,52 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
 }
 
 export async function processMessage(ctx: BotContext): Promise<BotResponse> {
-  const ruleIntent = detectIntent(ctx.text, ctx.previousState);
+  // 1. Cargar configuración de menú para detección temprana
+  const settings = (((ctx.metadata ?? {}) as any).settings ?? {}) as any;
+  const menuOptions = settings.flow?.welcomeMenu?.options ?? [];
 
-  // 🔴 LISTA DE INTENTS QUE NO USAN IA (Solo Reglas)
-  // He quitado 'greeting' de aquí para que "Hola" pase a la IA y responda Edu.
-  // He dejado solo los críticos o de salida rápida.
+  // 2. Interceptar selección de menú (si no estamos en medio de un pedido)
+  if (ctx.previousState !== 'collecting_order_details') {
+    const selectedId = detectMenuSelection(ctx.text, menuOptions);
+    
+    if (selectedId) {
+      const selectedOption = menuOptions.find((o: any) => o.id === selectedId);
+      
+      if (selectedOption) {
+        // Opción A: Tiene un triggerIntent configurado (ej. 'faq_menu')
+        if (selectedOption.triggerIntent) {
+           const intentMock: IntentMatch = { 
+             id: selectedOption.triggerIntent, 
+             confidence: 1.0, 
+             reason: 'Menu Selection' 
+           };
+           // Saltamos directo a construir la respuesta del intent
+           return await buildReply(intentMock, ctx);
+        }
+        
+        // Opción B: Es una respuesta de texto simple
+        if (selectedOption.replyText) {
+           return {
+             reply: selectedOption.replyText,
+             intent: { id: 'smalltalk', confidence: 1, reason: 'Menu Reply' },
+             nextState: 'idle',
+             needsHuman: false,
+             meta: { ...ctx.metadata }
+           };
+        }
+      }
+    }
+  }
+
+  // 3. Detección normal
+  const ruleIntent = detectIntent(ctx.text, ctx.previousState);
   const simpleIntents: IntentId[] = ['goodbye', 'handoff_human']; 
 
-  // Si es un intent simple y la confianza es muy alta, respondemos rápido
   if (ruleIntent.confidence >= 0.95 && simpleIntents.includes(ruleIntent.id)) {
     return await buildReply(ruleIntent, ctx);
   }
 
-  // Para todo lo demás, consultamos a la IA (Gemini)
+  // 4. IA NLU (Gemini)
   let aiResult: AiNLUResult | null = null;
   try {
     aiResult = await aiUnderstand(ctx, ruleIntent.id);
@@ -331,7 +358,7 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
         ...(ctx.metadata ?? {}),
         aiSlots: aiResult.slots,
         aiNeedsHuman: aiResult.needsHuman ?? false,
-        aiGeneratedReply: aiResult.generatedReply, // Guardamos la respuesta de Edu
+        aiGeneratedReply: aiResult.generatedReply, 
         orderDraft: mergedDraft
       }
     };
@@ -358,6 +385,5 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     return response;
   }
 
-  // Fallback si falla la IA
   return await buildReply(ruleIntent, ctx);
 }

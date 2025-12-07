@@ -31,6 +31,18 @@ export type Settings = {
     publicBaseUrl: string;
     webhookSecret: string;
   };
+  // 👇 NUEVO: Configuración del Flujo de Bienvenida
+  flow: {
+    welcomeMenu: {
+      headerText: string;
+      options: Array<{
+        id: string;
+        label: string;
+        replyText: string;
+        triggerIntent?: string;
+      }>;
+    };
+  };
 };
 
 export const defaultSettings: Settings = {
@@ -38,7 +50,7 @@ export const defaultSettings: Settings = {
   defaultChannel: 'whatsapp',
   whatsapp: {
     enabled: true,
-    phoneNumberId: '',      // 👉 ya NO vienen del .env aquí
+    phoneNumberId: '',
     accessToken: '',
     verifyToken: '',
     notificationPhones: ''
@@ -67,5 +79,31 @@ export const defaultSettings: Settings = {
   api: {
     publicBaseUrl: '',
     webhookSecret: ''
+  },
+  // 👇 NUEVOS DEFAULTS
+  flow: {
+    welcomeMenu: {
+      headerText: '¡Hola! 👋 Bienvenido a Delicias Porteñas. ¿En qué puedo ayudarte hoy?',
+      options: [
+        { 
+          id: 'op1', 
+          label: 'Ver Menú de Tortas 🎂', 
+          replyText: '', 
+          triggerIntent: 'faq_menu' 
+        },
+        { 
+          id: 'op2', 
+          label: 'Hacer un Pedido 📝', 
+          replyText: '¡Genial! Cuéntame qué te gustaría pedir (ej. Torta Mil Hojas para 15 personas).', 
+          triggerIntent: 'order_start' 
+        },
+        { 
+          id: 'op3', 
+          label: 'Horarios y Ubicación 📍', 
+          replyText: '', 
+          triggerIntent: 'faq_hours' 
+        }
+      ]
+    }
   }
 };

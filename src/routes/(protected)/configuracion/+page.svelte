@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { analytics, db } from '$lib/firebase';
+  import { db } from '$lib/firebase';
   import { doc, getDoc, setDoc } from 'firebase/firestore';
   import {
     defaultSettings,
@@ -14,7 +14,8 @@
   let error: string | null = null;
   let success = false;
 
-  type TabId = 'general' | 'whatsapp' | 'hours' | 'messages' | 'advanced';
+  // Agregamos 'menu' a los tabs
+  type TabId = 'general' | 'whatsapp' | 'hours' | 'messages' | 'advanced' | 'menu';
   let activeTab: TabId = 'general';
 
   const docRef = doc(db, 'settings', 'global');
@@ -31,36 +32,20 @@
         settings = {
           ...defaultSettings,
           ...data,
-          whatsapp: {
-            ...defaultSettings.whatsapp,
-            ...(data.whatsapp ?? {})
-          },
-          hours: {
-            ...defaultSettings.hours,
-            ...(data.hours ?? {})
-          },
-          messages: {
-            ...defaultSettings.messages,
-            ...(data.messages ?? {})
-          },
-          orders: {
-            ...defaultSettings.orders,
-            ...(data.orders ?? {})
-          },
-          api: {
-            ...defaultSettings.api,
-            ...(data.api ?? {})
-          }
+          whatsapp: { ...defaultSettings.whatsapp, ...(data.whatsapp ?? {}) },
+          hours: { ...defaultSettings.hours, ...(data.hours ?? {}) },
+          messages: { ...defaultSettings.messages, ...(data.messages ?? {}) },
+          orders: { ...defaultSettings.orders, ...(data.orders ?? {}) },
+          api: { ...defaultSettings.api, ...(data.api ?? {}) },
+          flow: { ...defaultSettings.flow, ...(data.flow ?? {}) }
         };
       } else {
-        // ✅ si no existe, escribimos los defaults
         settings = structuredClone(defaultSettings);
         await setDoc(docRef, settings);
       }
     } catch (e: unknown) {
       console.error(e);
-      error =
-        e instanceof Error ? e.message : 'Error al cargar la configuración.';
+      error = e instanceof Error ? e.message : 'Error al cargar la configuración.';
     } finally {
       loading = false;
     }
@@ -70,44 +55,25 @@
     saving = true;
     error = null;
     success = false;
-
     try {
       await setDoc(docRef, settings, { merge: true });
       success = true;
     } catch (e: unknown) {
       console.error(e);
-      error =
-        e instanceof Error ? e.message : 'Error al guardar la configuración.';
+      error = e instanceof Error ? e.message : 'Error al guardar la configuración.';
     } finally {
       saving = false;
-      setTimeout(() => {
-        success = false;
-      }, 2500);
+      setTimeout(() => { success = false; }, 2500);
     }
   }
 
   const tabs: { id: TabId; label: string; desc: string }[] = [
     { id: 'general', label: 'General', desc: 'Nombre y canal por defecto.' },
-    {
-      id: 'whatsapp',
-      label: 'WhatsApp',
-      desc: 'Tokens y números conectados.'
-    },
-    {
-      id: 'hours',
-      label: 'Horarios',
-      desc: 'Configuración de horarios de atención.'
-    },
-    {
-      id: 'messages',
-      label: 'Mensajes',
-      desc: 'Textos base del bot.'
-    },
-    {
-      id: 'advanced',
-      label: 'Avanzado',
-      desc: 'Webhooks y notificaciones técnicas.'
-    }
+    { id: 'menu', label: 'Menú Bienvenida', desc: 'Configura las 3 opciones principales.' }, // Nuevo tab
+    { id: 'whatsapp', label: 'WhatsApp', desc: 'Tokens y números conectados.' },
+    { id: 'hours', label: 'Horarios', desc: 'Configuración de horarios de atención.' },
+    { id: 'messages', label: 'Mensajes', desc: 'Textos base del bot.' },
+    { id: 'advanced', label: 'Avanzado', desc: 'Webhooks y notificaciones técnicas.' }
   ];
 </script>
 
@@ -116,7 +82,6 @@
 </svelte:head>
 
 <div class="flex flex-col gap-4">
-  <!-- Header -->
   <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
     <div>
       <h1 class="text-lg font-semibold text-slate-900">Configuración del Bot</h1>
@@ -151,447 +116,213 @@
     </div>
   </div>
 
-  <!-- Tabs -->
-  <div class="flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 text-[11px]">
+  <div class="flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-1 text-[11px]">
     {#each tabs as tab}
       <button
         type="button"
         on:click={() => (activeTab = tab.id)}
-        class={`flex-1 rounded-xl px-3 py-2 text-left transition
-          ${
-            activeTab === tab.id
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:bg-white/60'
-          }`}
+        class={`min-w-[120px] flex-1 rounded-xl px-3 py-2 text-left transition whitespace-nowrap
+          ${activeTab === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-white/60'}`}
       >
         <div class="font-medium">{tab.label}</div>
-        <div class="text-[10px] text-slate-400">{tab.desc}</div>
+        <div class="text-[10px] text-slate-400 truncate">{tab.desc}</div>
       </button>
     {/each}
   </div>
 
-  <!-- Contenido -->
   <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     {#if loading}
       <div class="p-6 text-xs text-slate-500">Cargando configuración…</div>
     {:else}
-      <!-- GENERAL -->
+    
       {#if activeTab === 'general'}
         <div class="grid gap-6 p-6 md:grid-cols-2">
           <div class="space-y-3">
             <h2 class="text-sm font-semibold text-slate-900">Datos generales</h2>
-            <p class="text-xs text-slate-500">
-              Estos datos se usan en los mensajes automáticos y en el panel.
-            </p>
             <div class="space-y-1">
-              <label
-                for="businessName"
-                class="text-[11px] font-medium text-slate-700"
-                >Nombre del negocio</label
-              >
-              <input
-                id="businessName"
-                bind:value={settings.businessName}
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="businessName" class="text-[11px] font-medium text-slate-700">Nombre del negocio</label>
+              <input id="businessName" bind:value={settings.businessName} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="defaultChannel"
-                class="text-[11px] font-medium text-slate-700"
-                >Canal por defecto</label
-              >
-              <select
-                id="defaultChannel"
-                bind:value={settings.defaultChannel}
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              >
+              <label for="defaultChannel" class="text-[11px] font-medium text-slate-700">Canal por defecto</label>
+              <select id="defaultChannel" bind:value={settings.defaultChannel} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60">
                 <option value="whatsapp">WhatsApp</option>
                 <option value="web">Webchat</option>
               </select>
             </div>
           </div>
-
           <div class="space-y-3">
             <h2 class="text-sm font-semibold text-slate-900">Pedidos</h2>
-            <p class="text-xs text-slate-500">
-              Define si el bot puede tomar pedidos automáticamente y cómo se notifican.
-            </p>
-
             <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
               <div>
                 <div class="text-[11px] font-medium text-slate-800">Permitir pedidos por bot</div>
-                <div class="text-[10px] text-slate-500">
-                  Si está desactivado, el bot solo informará y derivará a humano.
-                </div>
               </div>
-              <input
-                id="allowOrders"
-                type="checkbox"
-                bind:checked={settings.orders.allowOrders}
-                class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600"
-              />
+              <input type="checkbox" bind:checked={settings.orders.allowOrders} class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600" />
             </div>
-
             <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
               <div>
                 <div class="text-[11px] font-medium text-slate-800">Requerir confirmación manual</div>
-                <div class="text-[10px] text-slate-500">
-                  Un humano debe confirmar el pedido antes de darlo por aceptado.
-                </div>
               </div>
-              <input
-                id="requireConfirmation"
-                type="checkbox"
-                bind:checked={settings.orders.requireConfirmation}
-                class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600"
-              />
+              <input type="checkbox" bind:checked={settings.orders.requireConfirmation} class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="ordersNotifyEmail"
-                class="text-[11px] font-medium text-slate-700"
-                >Correo para notificaciones de pedidos</label
-              >
-              <input
-                id="ordersNotifyEmail"
-                type="email"
-                bind:value={settings.orders.notifyEmail}
-                placeholder="ej: pedidos@mitienda.cl"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="ordersNotifyEmail" class="text-[11px] font-medium text-slate-700">Correo notificaciones</label>
+              <input id="ordersNotifyEmail" type="email" bind:value={settings.orders.notifyEmail} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
           </div>
         </div>
       {/if}
 
-      <!-- WHATSAPP -->
+      {#if activeTab === 'menu'}
+        <div class="p-6 space-y-6">
+          <div class="max-w-2xl">
+            <h2 class="text-sm font-semibold text-slate-900 mb-1">Encabezado de Bienvenida</h2>
+            <p class="text-xs text-slate-500 mb-3">Este es el primer mensaje que verá el usuario.</p>
+            <textarea
+              bind:value={settings.flow.welcomeMenu.headerText}
+              rows="2"
+              class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
+                     outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
+            ></textarea>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-3">
+            {#each settings.flow.welcomeMenu.options as option, i}
+              <div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Opción {i + 1}</span>
+                  {#if option.triggerIntent}
+                    <span class="text-[9px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                      Automático: {option.triggerIntent}
+                    </span>
+                  {/if}
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-[10px] font-medium text-slate-500">Etiqueta del botón</label>
+                  <input
+                    bind:value={option.label}
+                    class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-500"
+                    placeholder="Ej: Ver Menú"
+                  />
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-[10px] font-medium text-slate-500">Respuesta del Bot</label>
+                  <textarea
+                    bind:value={option.replyText}
+                    rows="4"
+                    class="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-500"
+                    placeholder={option.triggerIntent ? "Se usará la lógica automática..." : "Escribe la respuesta aquí..."}
+                    disabled={!!option.triggerIntent} 
+                  ></textarea>
+                  {#if option.triggerIntent}
+                    <p class="text-[9px] text-slate-400">Usa lógica interna ({option.triggerIntent}). El texto es dinámico.</p>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       {#if activeTab === 'whatsapp'}
         <div class="grid gap-6 p-6 md:grid-cols-2">
           <div class="space-y-3">
             <h2 class="text-sm font-semibold text-slate-900">Credenciales de WhatsApp</h2>
-            <p class="text-xs text-slate-500">
-              Estos datos vienen de Meta Developers. Guárdalos con cuidado, no los compartas.
-            </p>
-
             <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
-              <div>
-                <div class="text-[11px] font-medium text-slate-800">Habilitar integración WhatsApp</div>
-                <div class="text-[10px] text-slate-500">
-                  Si está desactivado, el bot solo funcionará vía web.
-                </div>
-              </div>
-              <input
-                id="whatsappEnabled"
-                type="checkbox"
-                bind:checked={settings.whatsapp.enabled}
-                class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600"
-              />
+              <div class="text-[11px] font-medium text-slate-800">Habilitar WhatsApp</div>
+              <input type="checkbox" bind:checked={settings.whatsapp.enabled} class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="phoneNumberId"
-                class="text-[11px] font-medium text-slate-700"
-                >Phone Number ID</label
-              >
-              <input
-                id="phoneNumberId"
-                bind:value={settings.whatsapp.phoneNumberId}
-                placeholder="Ej: 123456789012345"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="phoneNumberId" class="text-[11px] font-medium text-slate-700">Phone Number ID</label>
+              <input id="phoneNumberId" bind:value={settings.whatsapp.phoneNumberId} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="accessToken"
-                class="text-[11px] font-medium text-slate-700"
-                >Access Token (permanente)</label
-              >
-              <input
-                id="accessToken"
-                type="password"
-                bind:value={settings.whatsapp.accessToken}
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
-              <p class="text-[10px] text-slate-400">
-                Usa un token de larga duración. No lo compartas por chat ni correo.
-              </p>
+              <label for="accessToken" class="text-[11px] font-medium text-slate-700">Access Token</label>
+              <input id="accessToken" type="password" bind:value={settings.whatsapp.accessToken} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="verifyToken"
-                class="text-[11px] font-medium text-slate-700"
-                >Verify Token (webhook)</label
-              >
-              <input
-                id="verifyToken"
-                bind:value={settings.whatsapp.verifyToken}
-                placeholder="Cadena secreta para validar el webhook"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="verifyToken" class="text-[11px] font-medium text-slate-700">Verify Token</label>
+              <input id="verifyToken" bind:value={settings.whatsapp.verifyToken} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
           </div>
-
           <div class="space-y-3">
-            <h2 class="text-sm font-semibold text-slate-900">Notificaciones internas</h2>
-            <p class="text-xs text-slate-500">
-              Define a qué números se envían copias o avisos de pedidos relevantes.
-            </p>
-
+            <h2 class="text-sm font-semibold text-slate-900">Notificaciones</h2>
             <div class="space-y-1">
-              <label
-                for="notificationPhones"
-                class="text-[11px] font-medium text-slate-700"
-              >
-                Números para notificación de pedidos
-              </label>
-              <textarea
-                id="notificationPhones"
-                rows="4"
-                bind:value={settings.whatsapp.notificationPhones}
-                placeholder="+56912345678, +56987654321"
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
-                       outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              ></textarea>
-              <p class="text-[10px] text-slate-400">
-                Separa múltiples números con coma. En el futuro, esta lista se puede usar para notificaciones automáticas.
-              </p>
+              <label for="notificationPhones" class="text-[11px] font-medium text-slate-700">Números para notificaciones</label>
+              <textarea id="notificationPhones" rows="4" bind:value={settings.whatsapp.notificationPhones} placeholder="+56912345678, +56987654321" class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
             </div>
           </div>
         </div>
       {/if}
 
-      <!-- HORARIOS -->
       {#if activeTab === 'hours'}
         <div class="grid gap-6 p-6 md:grid-cols-2">
           <div class="space-y-3">
-            <h2 class="text-sm font-semibold text-slate-900">Zona horaria y días hábiles</h2>
-            <p class="text-xs text-slate-500">
-              Estos valores se usarán en las respuestas de horarios y también en lógicas futuras del bot
-              (por ejemplo, mensajes fuera de horario).
-            </p>
-
+            <h2 class="text-sm font-semibold text-slate-900">Días hábiles</h2>
             <div class="space-y-1">
-              <label
-                for="timezone"
-                class="text-[11px] font-medium text-slate-700"
-                >Zona horaria</label
-              >
-              <input
-                id="timezone"
-                bind:value={settings.hours.timezone}
-                placeholder="America/Santiago"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="timezone" class="text-[11px] font-medium text-slate-700">Zona horaria</label>
+              <input id="timezone" bind:value={settings.hours.timezone} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="weekdays"
-                class="text-[11px] font-medium text-slate-700"
-                >Lunes a viernes</label
-              >
-              <input
-                id="weekdays"
-                bind:value={settings.hours.weekdays}
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="weekdays" class="text-[11px] font-medium text-slate-700">Lunes a viernes</label>
+              <input id="weekdays" bind:value={settings.hours.weekdays} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
           </div>
-
           <div class="space-y-3">
             <h2 class="text-sm font-semibold text-slate-900">Fin de semana</h2>
-
             <div class="space-y-1">
-              <label
-                for="saturday"
-                class="text-[11px] font-medium text-slate-700"
-                >Sábado</label
-              >
-              <input
-                id="saturday"
-                bind:value={settings.hours.saturday}
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
+              <label for="saturday" class="text-[11px] font-medium text-slate-700">Sábado</label>
+              <input id="saturday" bind:value={settings.hours.saturday} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="sunday"
-                class="text-[11px] font-medium text-slate-700"
-                >Domingo / festivos</label
-              >
-              <textarea
-                id="sunday"
-                rows="3"
-                bind:value={settings.hours.sunday}
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
-                       outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              ></textarea>
+              <label for="sunday" class="text-[11px] font-medium text-slate-700">Domingo / festivos</label>
+              <textarea id="sunday" rows="3" bind:value={settings.hours.sunday} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
             </div>
           </div>
         </div>
       {/if}
 
-      <!-- MENSAJES -->
       {#if activeTab === 'messages'}
         <div class="grid gap-6 p-6 md:grid-cols-2">
           <div class="space-y-3">
             <h2 class="text-sm font-semibold text-slate-900">Mensajes base</h2>
-            <p class="text-xs text-slate-500">
-              Estos textos se usarán como base en el motor del bot. Más adelante podemos hacer que el
-              engine lea directamente desde aquí según el intent.
-            </p>
-
             <div class="space-y-1">
-              <label
-                for="welcomeMessage"
-                class="text-[11px] font-medium text-slate-700"
-                >Mensaje de bienvenida</label
-              >
-              <textarea
-                id="welcomeMessage"
-                rows="4"
-                bind:value={settings.messages.welcome}
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
-                       outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              ></textarea>
+              <label for="welcomeMessage" class="text-[11px] font-medium text-slate-700">Bienvenida (Default)</label>
+              <textarea id="welcomeMessage" rows="4" bind:value={settings.messages.welcome} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
             </div>
-
             <div class="space-y-1">
-              <label
-                for="inactivityMessage"
-                class="text-[11px] font-medium text-slate-700"
-                >Mensaje por inactividad</label
-              >
-              <textarea
-                id="inactivityMessage"
-                rows="3"
-                bind:value={settings.messages.inactivity}
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
-                       outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              ></textarea>
+              <label for="inactivityMessage" class="text-[11px] font-medium text-slate-700">Inactividad</label>
+              <textarea id="inactivityMessage" rows="3" bind:value={settings.messages.inactivity} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
             </div>
           </div>
-
           <div class="space-y-3">
             <h2 class="text-sm font-semibold text-slate-900">Handoff y cierre</h2>
-
             <div class="space-y-1">
-              <label
-                for="handoffMessage"
-                class="text-[11px] font-medium text-slate-700"
-              >
-                Mensaje cuando se deriva a humano
-              </label>
-              <textarea
-                id="handoffMessage"
-                rows="3"
-                bind:value={settings.messages.handoff}
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
-                       outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              ></textarea>
+              <label for="handoffMessage" class="text-[11px] font-medium text-slate-700">Derivación a humano</label>
+              <textarea id="handoffMessage" rows="3" bind:value={settings.messages.handoff} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
             </div>
-
             <div class="space-y-1">
-              <label
-                for="closingMessage"
-                class="text-[11px] font-medium text-slate-700"
-                >Mensaje de cierre</label
-              >
-              <textarea
-                id="closingMessage"
-                rows="3"
-                bind:value={settings.messages.closing}
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800
-                       outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              ></textarea>
+              <label for="closingMessage" class="text-[11px] font-medium text-slate-700">Cierre</label>
+              <textarea id="closingMessage" rows="3" bind:value={settings.messages.closing} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
             </div>
           </div>
         </div>
       {/if}
 
-      <!-- AVANZADO -->
       {#if activeTab === 'advanced'}
         <div class="grid gap-6 p-6 md:grid-cols-2">
           <div class="space-y-3">
-            <h2 class="text-sm font-semibold text-slate-900">Webhooks y URL pública</h2>
-            <p class="text-xs text-slate-500">
-              Estos datos se usan para integrar con proveedores externos como Meta (WhatsApp) o
-              futuros canales.
-            </p>
-
+            <h2 class="text-sm font-semibold text-slate-900">Webhooks</h2>
             <div class="space-y-1">
-              <label
-                for="publicBaseUrl"
-                class="text-[11px] font-medium text-slate-700"
-                >URL pública base</label
-              >
-              <input
-                id="publicBaseUrl"
-                bind:value={settings.api.publicBaseUrl}
-                placeholder="https://tu-dominio.com"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
-              <p class="text-[10px] text-slate-400">
-                Ejemplo: <code>https://ccsolution.cl</code>. Tu endpoint de webhook sería
-                <code>{settings.api.publicBaseUrl || 'https://tu-dominio.com'}/api/webhook</code>.
-              </p>
+              <label for="publicBaseUrl" class="text-[11px] font-medium text-slate-700">URL pública base</label>
+              <input id="publicBaseUrl" bind:value={settings.api.publicBaseUrl} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-
             <div class="space-y-1">
-              <label
-                for="webhookSecret"
-                class="text-[11px] font-medium text-slate-700"
-                >Webhook Secret</label
-              >
-              <input
-                id="webhookSecret"
-                type="password"
-                bind:value={settings.api.webhookSecret}
-                placeholder="Cadena secreta opcional para validar requests entrantes"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800
-                       font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"
-              />
-              <p class="text-[10px] text-slate-400">
-                En el futuro puedes usar esto para firmar/verificar mensajes de entrada.
-              </p>
+              <label for="webhookSecret" class="text-[11px] font-medium text-slate-700">Webhook Secret</label>
+              <input id="webhookSecret" type="password" bind:value={settings.api.webhookSecret} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
             </div>
-          </div>
-
-          <div class="space-y-3">
-            <h2 class="text-sm font-semibold text-slate-900">Notas</h2>
-            <p class="text-xs text-slate-500">
-              Esta sección es la base para que tu plataforma sea multi-cliente: cada negocio tendrá
-              su propio documento de configuración. Por ahora usamos
-              <code>settings/global</code> para simplificar.
-            </p>
-            <ul class="list-disc space-y-1 pl-4 text-[11px] text-slate-500">
-              <li>Puedes clonar este esquema por <code>businessId</code> más adelante.</li>
-              <li>
-                El motor del bot puede leer estos valores (por ejemplo horarios o mensajes) en vez
-                de tenerlos hardcodeados.
-              </li>
-              <li>
-                Los tokens sensibles se almacenan aquí; en producción considera usar reglas de
-                seguridad apropiadas.
-              </li>
-            </ul>
           </div>
         </div>
       {/if}
