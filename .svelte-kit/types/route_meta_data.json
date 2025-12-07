@@ -1,0 +1,31 @@
+{
+	"/(protected)": [],
+	"/": [],
+	"/api/chat": [
+		"src/routes/api/chat/+server.ts"
+	],
+	"/api/conversations/status": [
+		"src/routes/api/conversations/status/+server.ts"
+	],
+	"/api/manual-reply": [
+		"src/routes/api/manual-reply/+server.ts"
+	],
+	"/api/webhook": [
+		"src/routes/api/webhook/+server.ts"
+	],
+	"/api/whatsapp": [
+		"src/routes/api/whatsapp/+server.ts"
+	],
+	"/(protected)/configuracion": [],
+	"/(protected)/conversaciones": [],
+	"/(protected)/conversaciones/[id]": [],
+	"/(protected)/dashboard": [],
+	"/login": [],
+	"/(protected)/perfil": [],
+	"/privacidad": [],
+	"/recovery": [],
+	"/register": [],
+	"/(protected)/sandbox/chat": [],
+	"/terminos": [],
+	"/(protected)/usuarios": []
+}

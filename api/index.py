@@ -174,7 +174,7 @@ def home():
     """Página de inicio para evitar errores 404 en el navegador"""
     return "🤖 El Bot de La Tiendita está ACTIVO y funcionando. Ve a WhatsApp.", 200
 
-@app.route('/webhook', methods=['GET'])
+@app.route('/api/webhook', methods=['GET'])
 def verify_webhook():
     """Verificación inicial de Facebook para conectar el webhook"""
     mode = request.args.get('hub.mode')
@@ -187,6 +187,56 @@ def verify_webhook():
         else:
             return 'Forbidden', 403
     return 'Hola, el bot está activo', 200
+
+# ==============================================================================
+# 🧪 ENDPOINT PARA EL SANDBOX (SIMULADOR)
+# ==============================================================================
+
+@app.route('/api/sandbox', methods=['POST'])
+def sandbox_chat():
+    """Simula la interacción del chat para el panel de control"""
+    data = request.json
+    text_body = data.get('text', '').lower()
+    user_id = data.get('conversationId', 'sandbox-user')
+    
+    # 1. Loguear lo que el usuario "escribió" en el simulador
+    log_conversation(user_id, 'inbound', text_body)
+    
+    reply = ""
+    intent_id = "unknown"
+    
+    # --- REPLICAMOS TU LÓGICA DE NEGOCIO AQUÍ ---
+    # Esto asegura que el simulador responda igual que WhatsApp
+    
+    # A) Lógica de Pedido Web
+    if "pedido web" in text_body or "quiero confirmar" in text_body:
+        intent_id = "order_web"
+        reply = (
+            "¡Hola! 👋\n"
+            "✅ Hemos recibido el detalle de tu pedido Web.\n\n"
+            "Un humano 🙋‍♂️ revisará el stock y te escribirá en breve para coordinar."
+        )
+    
+    # B) Lógica de Saludos/Menú
+    elif any(p in text_body for p in ["hola", "buen", "inicio", "menu", "menú", "volver"]):
+        intent_id = "greeting"
+        reply = "[Se envía Plantilla: delicias_bienvenida_menu]" 
+        # Nota: En el sandbox devolvemos texto descriptivo porque no podemos renderizar 
+        # la plantilla de WhatsApp real en la web fácilmente.
+        
+    # C) Fallback
+    else:
+        intent_id = "fallback"
+        reply = "⚠️ Mensaje no reconocido por las reglas actuales."
+
+    # 2. Loguear la respuesta del bot
+    log_conversation(user_id, 'outbound', reply)
+    
+    return jsonify({
+        "reply": reply,
+        "intent": {"id": intent_id},
+        "nextState": "idle"
+    })
 
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
