@@ -154,13 +154,18 @@ def send_whatsapp_text(phone_number, text):
         "text": {"body": text}
     }
     
-    # Logueamos
+    # Debug
+    print(f"📤 Intentando enviar texto a {phone_number}...")
+
     log_conversation(phone_number, 'outbound', text, "text")
 
     try:
-        requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=data, headers=headers)
+        print(f"📬 Respuesta Meta Status: {response.status_code}")
+        if response.status_code != 200:
+             print(f"❌ Error Meta Body: {response.text}")
     except Exception as e:
-        print(f"❌ Error request Meta: {e}")
+        print(f"❌ Error enviando texto: {e}")
 
 # ==============================================================================
 # 🌐 RUTAS FLASK
