@@ -1,8 +1,26 @@
 from flask import Flask, request, jsonify, url_for
 import requests
 import os
+import firebase_admin
+from firebase_admin import credentials, firestore
+from datetime import datetime
 
 app = Flask(__name__)
+
+# ==============================================================================
+# 🔥 INICIALIZACIÓN FIREBASE (Para que el Dashboard vea los datos)
+# ==============================================================================
+# En Vercel, pasaremos las credenciales como variables de entorno o archivo json
+# Si estás en local, asegúrate de tener tu serviceAccountKey.json
+if not firebase_admin._apps:
+    # Opción A: Usando diccionario desde variable de entorno (Recomendado para Vercel)
+    # cred = credentials.Certificate(json.loads(os.environ.get('FIREBASE_CREDENTIALS')))
+    
+    # Opción B: Inicialización por defecto (si Vercel tiene configurado Google Cloud)
+    cred = credentials.ApplicationDefault()
+    firebase_admin.initialize_app(cred, {'projectId': os.environ.get("FIREBASE_PROJECT_ID")})
+
+db = firestore.client()
 
 # ==============================================================================
 # ⚙️ CONFIGURACIÓN SEGURA (Variables de Entorno)
@@ -19,6 +37,45 @@ TEMPLATE_BIENVENIDA = "delicias_bienvenida_menu"
 TEMPLATE_PEDIDO = "respond_pedido"
 TEMPLATE_PREGUNTA = "respond_question"
 TEMPLATE_ATENCION = "responde_atencion_cliente"
+
+
+def log_conversation(phone_number, direction, text, type="text"):
+    """
+    Guarda el mensaje en Firestore para que el Dashboard Svelte lo vea.
+    Estructura compatible con: src/lib/chatbot/store.ts
+    """
+    try:
+        conv_id = f"wa:{phone_number}"
+        conv_ref = db.collection('conversations').document(conv_id)
+        
+        # 1. Crear documento de conversación si no existe
+        if not conv_ref.get().exists:
+            conv_ref.set({
+                'channel': 'whatsapp',
+                'userId': phone_number,
+                'status': 'open',
+                'createdAt': firestore.SERVER_TIMESTAMP,
+                'updatedAt': firestore.SERVER_TIMESTAMP
+            })
+
+        # 2. Agregar mensaje a la subcolección
+        conv_ref.collection('messages').add({
+            'from': 'user' if direction == 'inbound' else 'bot',
+            'direction': 'in' if direction == 'inbound' else 'out',
+            'text': text,
+            'createdAt': firestore.SERVER_TIMESTAMP,
+            'type': type
+        })
+
+        # 3. Actualizar último mensaje
+        conv_ref.update({
+            'lastMessageText': text,
+            'lastMessageAt': firestore.SERVER_TIMESTAMP,
+            'updatedAt': firestore.SERVER_TIMESTAMP
+        })
+        print(f"✅ Log guardado en Firestore: {text}")
+    except Exception as e:
+        print(f"❌ Error guardando en Firestore: {e}")
 
 # ==============================================================================
 # 🛠️ FUNCIONES DE AYUDA
@@ -72,6 +129,7 @@ def send_whatsapp_template(phone_number, template_name, user_name=None):
 
     # Debug: Imprimimos qué estamos intentando enviar
     print(f"📤 Intentando enviar plantilla '{template_name}' a {phone_number}...")
+    log_conversation(phone_number, 'outbound', f"[Plantilla: {template_name}]", "template")
 
     try:
         response = requests.post(url, json=data, headers=headers)
@@ -97,6 +155,7 @@ def send_whatsapp_text(phone_number, text):
     
     # Debug
     print(f"📤 Intentando enviar texto a {phone_number}...")
+log_conversation(phone_number, 'outbound', text, "text")
 
     try:
         response = requests.post(url, json=data, headers=headers)
@@ -129,7 +188,7 @@ def verify_webhook():
             return 'Forbidden', 403
     return 'Hola, el bot está activo', 200
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/api/webhook', methods=['POST'])
 def webhook():
     """Recepción de mensajes"""
     body = request.json
@@ -160,6 +219,7 @@ def webhook():
                 # ------------------------------------------------------
                 if msg_type == "text":
                     text_body = message["text"]["body"].lower()
+                    log_conversation(phone_number, 'inbound', text_body)
                     print(f"📝 Texto recibido: {text_body}")
                     
                     # 🟢 DETECCIÓN DE PEDIDO WEB 🟢
