@@ -19,7 +19,6 @@ export const defaultServerSettings: Settings = {
     publicBaseUrl: privateEnv.PUBLIC_BASE_URL ?? baseDefaults.api.publicBaseUrl,
     webhookSecret: privateEnv.WEBHOOK_SECRET ?? baseDefaults.api.webhookSecret
   },
-  // Aseguramos que 'flow' exista
   flow: {
     ...baseDefaults.flow,
     ...(baseDefaults.flow ?? {}) 
@@ -41,33 +40,15 @@ export async function getGlobalSettings(): Promise<Settings> {
     return {
       ...defaultServerSettings,
       ...data,
-      whatsapp: {
-        ...defaultServerSettings.whatsapp,
-        ...(data.whatsapp ?? {})
-      },
-      hours: {
-        ...defaultServerSettings.hours,
-        ...(data.hours ?? {})
-      },
-      messages: {
-        ...defaultServerSettings.messages,
-        ...(data.messages ?? {})
-      },
-      orders: {
-        ...defaultServerSettings.orders,
-        ...(data.orders ?? {})
-      },
-      api: {
-        ...defaultServerSettings.api,
-        ...(data.api ?? {})
-      },
-      flow: {
-        ...defaultServerSettings.flow,
-        ...(data.flow ?? {})
-      }
+      whatsapp: { ...defaultServerSettings.whatsapp, ...(data.whatsapp ?? {}) },
+      hours: { ...defaultServerSettings.hours, ...(data.hours ?? {}) },
+      messages: { ...defaultServerSettings.messages, ...(data.messages ?? {}) },
+      orders: { ...defaultServerSettings.orders, ...(data.orders ?? {}) },
+      api: { ...defaultServerSettings.api, ...(data.api ?? {}) },
+      flow: { ...defaultServerSettings.flow, ...(data.flow ?? {}) }
     };
   } catch (err) {
-    console.error('❌ Error leyendo settings desde Firestore:', err);
+    console.error('❌ Error leyendo settings:', err);
     return defaultServerSettings;
   }
 }
