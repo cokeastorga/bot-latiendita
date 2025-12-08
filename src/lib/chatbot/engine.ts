@@ -30,7 +30,7 @@ type SettingsMeta = {
     nodes?: Record<string, {
       id: string;
       text: string;
-      mediaUrl?: string; // URL de la imagen
+      mediaUrl?: string;
       options: Array<{
         id: string;
         label: string;
@@ -72,7 +72,6 @@ export interface BotResponse {
   shouldClearMemory?: boolean; 
   interactive?: {
     type: 'button' | 'list';
-    header?: { type: 'image'; image: { link: string } }; // 👈 SOPORTE PARA HEADER
     body: { text: string };
     action: any;
   };
@@ -111,9 +110,6 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
   const messages = settings.messages ?? {};
   const hours = settings.hours ?? {};
   const flow = settings.flow?.welcomeMenu ?? {}; 
-  // Nota: Para el flujo nuevo usamos settings.flow.nodes.welcome directamente en el case 'greeting'
-  // pero mantenemos compatibilidad por si acaso.
-  
   const botNumber = settings.whatsapp?.chatbotNumber;
   const lineBreak = isWhatsApp ? '\n' : '\n';
   const aiReply = (ctx.metadata as any)?.aiGeneratedReply as string | undefined;
@@ -125,14 +121,10 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
 
   switch (intent.id) {
     case 'greeting': {
-      // Cargamos el nodo 'welcome' de la nueva estructura
       const welcomeNode = settings.flow?.nodes?.['welcome'];
-      
       if (welcomeNode) {
         return formatNodeResponse(welcomeNode, 'welcome', ctx);
       }
-      
-      // Fallback si no existe la config nueva
       reply = 'Hola, bienvenido.';
       nextState = 'idle';
       break;
@@ -232,16 +224,13 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     currentFlowId = 'welcome';
   }
 
-  // 1. NAVEGACIÓN DE FLUJO
+  // 1. NAVEGACIÓN
   if (flowActive) {
     const currentNode = flowNodes[currentFlowId];
-
     if (currentNode && currentNode.options) {
       const selectedId = detectMenuSelection(ctx.text, currentNode.options);
-      
       if (selectedId) {
         const selectedOption = currentNode.options.find((o: any) => o.id === selectedId);
-
         if (selectedOption) {
           if (selectedOption.action === 'link') {
             return {
@@ -251,12 +240,10 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
               meta: { ...ctx.metadata, currentFlowId }
             };
           }
-
           if (selectedOption.action === 'back') {
             const welcomeNode = flowNodes['welcome'];
             return formatNodeResponse(welcomeNode, 'welcome', ctx);
           }
-
           if (selectedOption.action === 'template' && selectedOption.target) {
             const nextNodeId = selectedOption.target;
             const nextNode = flowNodes[nextNodeId];
@@ -313,11 +300,12 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
   let interactive = undefined;
   let media: Array<{ type: 'image'; url: string; caption?: string }> | undefined = undefined;
 
-  // Lógica de Imagen
-  const hasImage = node.mediaUrl && node.mediaUrl.length > 5;
+  // 1. IMAGEN (Separada para seguridad)
+  if (node.mediaUrl && node.mediaUrl.length > 5) {
+    media = [{ type: 'image', url: node.mediaUrl, caption: '' }];
+  }
 
-  // CASO 1: WHATSAPP CON BOTONES (1-3 opciones)
-  // Aquí incrustamos la imagen en el HEADER del mensaje interactivo
+  // 2. BOTONES
   if (ctx.channel === 'whatsapp' && node.options && node.options.length > 0 && node.options.length <= 3) {
     const buttons = node.options.map((opt: any) => ({
       type: 'reply',
@@ -330,30 +318,14 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
     interactive = {
       type: 'button',
       body: { text: node.text },
-      action: { buttons },
-      // 👇 MAGIA: Si hay imagen, la ponemos en el header
-      ...(hasImage && {
-        header: {
-          type: 'image',
-          image: { link: node.mediaUrl }
-        }
-      })
+      action: { buttons }
     };
     
-    // Al usar header, NO enviamos media por separado para no duplicar
     menuText = node.text; 
   } 
-  // CASO 2: FALLBACK (Web o lista larga)
-  else {
-    // Si hay imagen, la enviamos como adjunto normal
-    if (hasImage) {
-      media = [{ type: 'image', url: node.mediaUrl!, caption: '' }];
-    }
-    
-    if (node.options && node.options.length > 0) {
-      const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
-      menuText += `${lineBreak}${lineBreak}${list}`;
-    }
+  else if (node.options && node.options.length > 0) {
+    const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
+    menuText += `${lineBreak}${lineBreak}${list}`;
   }
 
   return {
