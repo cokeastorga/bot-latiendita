@@ -61,7 +61,7 @@
     </div>
     <div class="flex flex-col">
       <span class="text-sm font-semibold tracking-wide">
-        CC Solution
+        CC Solutions
       </span>
       <span class="text-[11px] text-slate-400">
         Panel del chatbot
