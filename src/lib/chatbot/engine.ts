@@ -23,7 +23,6 @@ export type IntentId =
   | 'goodbye'
   | 'fallback';
 
-// Estructura SettingsMeta acorde a lo nuevo
 type SettingsMeta = {
   businessName?: string;
   flow?: {
@@ -41,6 +40,9 @@ type SettingsMeta = {
   };
   messages?: any;
   hours?: any;
+  whatsapp?: {
+    chatbotNumber?: string;
+  };
 };
 
 export interface BotContext {
@@ -67,32 +69,30 @@ export interface BotResponse {
   meta?: Record<string, unknown>;
   media?: Array<{ type: 'image'; url: string; caption?: string }>;
   shouldClearMemory?: boolean; 
+  // 👇 NUEVO: Para botones
+  interactive?: {
+    type: 'button' | 'list';
+    body: { text: string };
+    action: any;
+  };
 }
 
 function normalize(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
-/**
- * Función que busca si el usuario seleccionó una opción del nodo actual
- */
-function detectNodeSelection(text: string, options: any[]): any | null {
+function detectMenuSelection(text: string, options: any[]): string | null {
   const n = normalize(text);
-  // 1. Por índice (1, 2, 3...)
   if (/^\d+$/.test(n)) {
     const index = parseInt(n) - 1;
-    if (options[index]) return options[index];
+    if (options[index]) return options[index].id;
   }
-  // 2. Por texto aproximado
   for (const opt of options) {
-    if (n.includes(normalize(opt.label))) return opt;
+    if (n.includes(normalize(opt.label))) return opt.id;
   }
   return null;
 }
 
-/**
- * Detección de intención básica
- */
 export function detectIntent(text: string, previousState?: string | null): IntentMatch {
   const normalized = normalize(text);
   const has = (k: string[]) => k.some(w => normalized.includes(w));
@@ -104,68 +104,167 @@ export function detectIntent(text: string, previousState?: string | null): Inten
   return { id: 'fallback', confidence: 0.3, reason: 'fallback' };
 }
 
-/**
- * Procesa mensajes con el nuevo sistema de Flujos
- */
-export async function processMessage(ctx: BotContext): Promise<BotResponse> {
+export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<BotResponse> {
+  const isWhatsApp = ctx.channel === 'whatsapp';
   const settings = (((ctx.metadata ?? {}) as any).settings ?? {}) as SettingsMeta;
+  const messages = settings.messages ?? {};
+  const hours = settings.hours ?? {};
+  const flow = settings.flow?.welcomeMenu ?? {};
+  const options = flow.options ?? [];
+  const botNumber = settings.whatsapp?.chatbotNumber;
+  
+  const lineBreak = isWhatsApp ? '\n' : '\n';
+  const aiReply = (ctx.metadata as any)?.aiGeneratedReply as string | undefined;
+
+  let reply = '';
+  let nextState: string | null = ctx.previousState ?? null;
+  let needsHuman = false;
+  let shouldClearMemory = false;
+
+  switch (intent.id) {
+    case 'greeting': {
+      const welcomeNode = {
+        text: flow.headerText || 'Hola, elige una opción:',
+        options: options
+      };
+      // Forzamos la respuesta de nodo para generar botones
+      return formatNodeResponse(welcomeNode, 'welcome', ctx);
+    }
+
+    case 'smalltalk': {
+      reply = aiReply || `Estoy aquí para ayudarte. 😊`;
+      nextState = 'idle';
+      break;
+    }
+
+    case 'order_start': {
+      const producto = buscarProductoPorTexto(ctx.text);
+      const draft: OrderDraft = { producto: producto ? producto.nombre : null };
+      return await buildProductOrderResponse(producto, draft, ctx, intent, lineBreak, aiReply);
+    }
+
+    case 'order_status': {
+      reply = `Para revisar el estado necesito algún dato de referencia.`;
+      nextState = 'awaiting_order_reference';
+      break;
+    }
+
+    case 'faq_hours': {
+      const wd = hours.weekdays || 'Consultar';
+      const sat = hours.saturday || 'Consultar';
+      const sun = hours.sunday || 'Cerrado';
+      reply = aiReply && aiReply.length > 20 ? aiReply : `🕒 *Horarios:*\n• L-V: ${wd}\n• Sáb: ${sat}\n• Dom: ${sun}`;
+      nextState = 'idle';
+      shouldClearMemory = true;
+      break;
+    }
+
+    case 'faq_menu': {
+      const resumen = buildMenuResumen(4);
+      const intro = aiReply ? aiReply : `Aquí tienes algunas opciones 🍰:`;
+      reply = `${intro}${lineBreak}${lineBreak}${resumen}${lineBreak}${lineBreak}¿Te gustaría alguna?`;
+      nextState = 'idle';
+      shouldClearMemory = true;
+      break;
+    }
+
+    case 'handoff_human': {
+      if (ctx.channel === 'web' && botNumber) {
+        reply = `Para atención rápida, hablemos por WhatsApp: https://wa.me/${botNumber}`;
+      } else {
+        reply = messages.handoff || 'Un ejecutivo te atenderá pronto. 👤';
+      }
+      nextState = 'handoff_requested';
+      needsHuman = true;
+      break;
+    }
+
+    case 'goodbye': {
+      reply = aiReply || messages.closing || '¡Gracias! 👋';
+      nextState = 'ended';
+      shouldClearMemory = true;
+      break;
+    }
+
+    case 'fallback':
+    default: {
+      const producto = buscarProductoPorTexto(ctx.text);
+      if (producto) {
+        const draft: OrderDraft = { producto: producto.nombre };
+        return await buildProductOrderResponse(producto, draft, ctx, intent, lineBreak, aiReply);
+      }
+      reply = aiReply || `No estoy seguro. Prueba "Ver menú".`;
+      nextState = 'idle';
+      break;
+    }
+  }
+
+  return {
+    reply,
+    intent,
+    nextState,
+    needsHuman,
+    meta: {
+      channel: ctx.channel,
+      locale: ctx.locale || 'es',
+      previousState: ctx.previousState ?? null
+    },
+    shouldClearMemory
+  };
+}
+
+export async function processMessage(ctx: BotContext): Promise<BotResponse> {
+  const settings = (((ctx.metadata ?? {}) as any).settings ?? {}) as any;
   const flowActive = settings.flow?.active ?? true;
   const flowNodes = settings.flow?.nodes ?? {};
   
-  // Estado actual del flujo (por defecto 'welcome' si no existe)
   let currentFlowId = (ctx.metadata?.currentFlowId as string) || 'welcome';
   
-  // Verificar comandos globales de salida
   const nText = normalize(ctx.text);
   if (nText === 'salir' || nText === 'cancelar' || nText === 'inicio' || nText === 'hola') {
-    // Reset forzado
     currentFlowId = 'welcome';
   }
 
-  // 1. SI EL FLUJO ESTÁ ACTIVO, INTENTAR NAVEGAR
+  // 1. NAVEGACIÓN DE FLUJO
   if (flowActive) {
     const currentNode = flowNodes[currentFlowId];
 
     if (currentNode && currentNode.options) {
-      const selectedOption = detectNodeSelection(ctx.text, currentNode.options);
+      const selectedId = detectMenuSelection(ctx.text, currentNode.options);
+      
+      if (selectedId) {
+        const selectedOption = currentNode.options.find((o: any) => o.id === selectedId);
 
-      if (selectedOption) {
-        // --- ACCIÓN: LINK ---
-        if (selectedOption.action === 'link') {
-          return {
-            reply: `🔗 Puedes visitarlo aquí: ${selectedOption.target}`,
-            intent: { id: 'smalltalk', confidence: 1, reason: 'flow_link' },
-            nextState: 'idle',
-            meta: { ...ctx.metadata, currentFlowId } // Mantenemos el mismo nodo
-          };
-        }
+        if (selectedOption) {
+          if (selectedOption.action === 'link') {
+            return {
+              reply: `🔗 Link: ${selectedOption.target}`,
+              intent: { id: 'smalltalk', confidence: 1, reason: 'flow_link' },
+              nextState: 'idle',
+              meta: { ...ctx.metadata, currentFlowId }
+            };
+          }
 
-        // --- ACCIÓN: VOLVER ---
-        if (selectedOption.action === 'back') {
-          // Volver siempre a welcome
-          const welcomeNode = flowNodes['welcome'];
-          return formatNodeResponse(welcomeNode, 'welcome', ctx);
-        }
+          if (selectedOption.action === 'back') {
+            const welcomeNode = flowNodes['welcome'];
+            return formatNodeResponse(welcomeNode, 'welcome', ctx);
+          }
 
-        // --- ACCIÓN: TEMPLATE (Ir a otro nodo) ---
-        if (selectedOption.action === 'template' && selectedOption.target) {
-          const nextNodeId = selectedOption.target;
-          const nextNode = flowNodes[nextNodeId];
-          if (nextNode) {
-            return formatNodeResponse(nextNode, nextNodeId, ctx);
+          if (selectedOption.action === 'template' && selectedOption.target) {
+            const nextNodeId = selectedOption.target;
+            const nextNode = flowNodes[nextNodeId];
+            if (nextNode) {
+              return formatNodeResponse(nextNode, nextNodeId, ctx);
+            }
           }
         }
-        
-        // --- ACCIÓN: NONE (Dejar pasar) ---
-        // Si es 'none', dejamos que el código siga abajo a la lógica de IA/Pedidos
       }
     }
   }
 
-  // 2. DETECCIÓN INTENCIÓN NORMAL (Fallback o lógica compleja de pedidos)
+  // 2. DETECCIÓN NORMAL
   const ruleIntent = detectIntent(ctx.text, ctx.previousState);
 
-  // Si es Saludo -> Forzar Welcome Node
   if (ruleIntent.id === 'greeting' && flowActive) {
     const welcomeNode = flowNodes['welcome'];
     if (welcomeNode) {
@@ -173,16 +272,12 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     }
   }
 
-  // Si es Pedido -> Usar lógica de pedidos existente
   if (ruleIntent.id === 'order_start' || ctx.previousState === 'collecting_order_details') {
     const producto = buscarProductoPorTexto(ctx.text);
     const draft: OrderDraft = { producto: producto ? producto.nombre : null };
-    // Mantenemos el flujo actual o lo reseteamos? 
-    // Al entrar a un pedido complejo, podríamos "pausar" el flujo de menú.
     return await buildProductOrderResponse(producto, draft, ctx, ruleIntent, '\n');
   }
 
-  // 3. IA Fallback (Gemini)
   let aiResult: AiNLUResult | null = null;
   try {
     aiResult = await aiUnderstand(ctx, ruleIntent.id);
@@ -197,32 +292,53 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     };
   }
 
-  // Fallback final
   return {
-    reply: 'No entendí tu opción. Escribe "Inicio" para ver el menú principal.',
+    reply: 'No entendí tu opción. Escribe "Inicio" para ver el menú.',
     intent: { id: 'fallback', confidence: 1, reason: 'fallback' },
     nextState: 'idle',
     meta: { ...ctx.metadata }
   };
 }
 
-// Helper para formatear respuesta de un nodo
 function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResponse {
   const lineBreak = ctx.channel === 'whatsapp' ? '\n' : '\n';
   let menuText = node.text;
-  
-  if (node.options && node.options.length > 0) {
-    const list = node.options.map((opt: any) => `👉 ${opt.label}`).join(lineBreak);
+  let interactive = undefined;
+
+  // 🔴 LÓGICA DE BOTONES PARA WHATSAPP
+  // Solo si es WhatsApp y hay entre 1 y 3 opciones
+  if (ctx.channel === 'whatsapp' && node.options && node.options.length > 0 && node.options.length <= 3) {
+    const buttons = node.options.map((opt: any) => ({
+      type: 'reply',
+      reply: {
+        id: opt.id,
+        // TRUNCAMOS a 20 caracteres porque WhatsApp falla si es más largo
+        title: opt.label.substring(0, 20) 
+      }
+    }));
+
+    interactive = {
+      type: 'button',
+      body: { text: node.text },
+      action: { buttons }
+    };
+    // El texto principal no lleva la lista porque van los botones
+    menuText = node.text; 
+  } 
+  else if (node.options && node.options.length > 0) {
+    // Fallback: Lista de texto para Web o si hay más de 3 opciones
+    const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
     menuText += `${lineBreak}${lineBreak}${list}`;
   }
 
   return {
     reply: menuText,
+    interactive: interactive as any, // Payload interactivo
     intent: { id: 'smalltalk', confidence: 1, reason: 'flow_node' },
-    nextState: 'awaiting_menu_selection', // Marcador para saber que esperamos input de menú
+    nextState: 'awaiting_menu_selection',
     meta: { 
       ...ctx.metadata, 
-      currentFlowId: nodeId // ACTUALIZAMOS EL ESTADO DEL FLUJO
+      currentFlowId: nodeId 
     }
   };
 }

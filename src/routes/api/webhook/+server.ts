@@ -17,7 +17,6 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 
-// Tipos auxiliares para el historial
 type HistoryItem = {
   from: 'user' | 'bot';
   text: string;
@@ -41,9 +40,8 @@ export const GET: RequestHandler = async ({ url }) => {
   const token = url.searchParams.get('hub.verify_token');
   const challenge = url.searchParams.get('hub.challenge');
 
-  // Cargar token desde configuración o env
   const settings = await getGlobalSettings();
-  const VERIFY_TOKEN = settings.whatsapp.verifyToken || process.env.WHATSAPP_VERIFY_TOKEN || 'mi_token_seguro';
+  const VERIFY_TOKEN = settings.whatsapp.verifyToken || 'mi_token_seguro';
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN && challenge) {
     console.log('✅ WEBHOOK_VERIFIED (WhatsApp)');
@@ -64,270 +62,260 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ ok: true, skip: 'Not a WhatsApp event' });
   }
 
-  const entry = body.entry?.[0];
-  const change = entry?.changes?.[0];
-  const value = change?.value;
-  const messages = value?.messages ?? [];
-
-  if (!messages.length) {
-    return json({ ok: true, skip: 'No messages' });
-  }
-
-  const msg = messages[0];
-
-  // Solo procesamos texto
-  if (msg.type !== 'text') {
-    console.log('ℹ️ Ignorado (no texto):', msg.type);
-    return json({ ok: true, ignored: true });
-  }
-
-  const fromPhone: string = msg.from;
-  const text: string = msg.text?.body ?? '';
-
-  if (!text.trim()) {
-    return json({ ok: true, ignored: 'Empty text' });
-  }
-
-  // Cargar configuración global
-  let settings: any = { whatsapp: {} };
-  try {
-    settings = await getGlobalSettings();
-  } catch (err) {
-    console.error('❌ Error leyendo settings:', err);
-  }
-
+  const settings = await getGlobalSettings();
   const whatsappCfg = settings.whatsapp;
-  const accessToken = whatsappCfg.accessToken || process.env.WHATSAPP_TOKEN;
-  const phoneId = whatsappCfg.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-  // ----------------------------------------------------------------
-  // 1. Gestión de Conversación en Firestore
-  // ----------------------------------------------------------------
-  const conversationId = `wa:${fromPhone}`;
-  const convRef = doc(db, 'conversations', conversationId);
-  const convSnap = await getDoc(convRef);
-
-  let convData: ConversationDoc;
-
-  if (!convSnap.exists()) {
-    convData = {
-      state: null,
-      metadata: {},
-      history: [],
-      channel: 'whatsapp',
-      userId: fromPhone,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    await setDoc(convRef, convData);
-  } else {
-    convData = (convSnap.data() as ConversationDoc) || {};
-  }
-
-  // ----------------------------------------------------------------
-  // 2. Lógica Timeout (5 Minutos)
-  // ----------------------------------------------------------------
-  const TIMEOUT_MS = 5 * 60 * 1000;
-  const now = Date.now();
-  
-  // Obtener timestamp del último mensaje de forma segura
-  const lastMsgTime = convData.lastMessageAt?.toMillis 
-    ? convData.lastMessageAt.toMillis() 
-    : (convData.updatedAt?.toMillis ? convData.updatedAt.toMillis() : now);
-
-  let previousState = convData.state ?? null;
-  let previousMetadata = convData.metadata ?? {};
-  
-  // Si expiró el tiempo, limpiamos el contexto ANTES de procesar
-  if (now - lastMsgTime > TIMEOUT_MS) {
-    console.log(`⏱️ Sesión expirada para ${conversationId}. Reiniciando contexto.`);
-    previousState = null;
-    // Limpiamos SOLO datos de flujo, mantenemos configuración administrativa
-    previousMetadata = {
-      ...previousMetadata,
-      orderDraft: null,
-      aiSlots: null,
-      aiGeneratedReply: null
-    };
-  }
-
-  // Historial para la IA (últimos 15 mensajes para dar contexto suficiente)
-  const history: HistoryItem[] = (convData.history ?? []).slice(-15);
-
-  // ----------------------------------------------------------------
-  // 3. Llamada al Motor (Engine + IA)
-  // ----------------------------------------------------------------
-  const ctx: BotContext = {
-    conversationId,
-    userId: fromPhone,
-    channel: 'whatsapp',
-    text,
-    locale: 'es',
-    previousState,
-    metadata: {
-      ...previousMetadata,
-      history,  // Pasamos el historial limpio
-      settings, // Pasamos la config global
-      wa: {     // Datos técnicos de WhatsApp
-        phone_number: value?.metadata?.display_phone_number,
-        phone_number_id: phoneId
-      }
-    }
-  };
-
-  // Procesamos el mensaje
-  const botResponse = await processMessage(ctx);
-
-  // ----------------------------------------------------------------
-  // 4. Actualización de Estado (Post-Proceso)
-  // ----------------------------------------------------------------
-  const newHistory: HistoryItem[] = [
-    ...history,
-    { from: 'user', text, ts: Date.now() },
-    { from: 'bot', text: botResponse.reply, ts: Date.now() }
-  ].slice(-40); // Guardamos más historial en DB por seguridad
-
-  // Preparamos la nueva metadata con lo que devolvió el motor
-  const newMetadata: Record<string, unknown> = {
-    ...previousMetadata,
-    ...(botResponse.meta ?? {})
-  };
-
-  // Lógica de limpieza por "Fin de Flujo" (shouldClearMemory)
-  let nextStateToSave = botResponse.nextState ?? previousState ?? null;
-
-  if (botResponse.shouldClearMemory) {
-    console.log(`🧹 Limpiando memoria por fin de flujo para ${conversationId}.`);
-    delete newMetadata.orderDraft;
-    delete newMetadata.aiSlots;
-    delete newMetadata.aiGeneratedReply;
-    nextStateToSave = null;
-  }
-
-  // Guardamos en Firestore
-  await updateDoc(convRef, {
-    state: nextStateToSave,
-    metadata: newMetadata,
-    history: newHistory,
-    userId: fromPhone,
-    updatedAt: serverTimestamp(),
-    lastMessageAt: serverTimestamp(),
-    lastMessageText: text,
-    needsHuman: botResponse.needsHuman ?? false,
-    status: botResponse.needsHuman ? 'pending' : 'open'
-  });
-
-  // ----------------------------------------------------------------
-  // 5. Notificaciones y Logs
-  // ----------------------------------------------------------------
-  
-  // Notificar a Staff si se requiere humano
-  if (botResponse.needsHuman) {
-    const orderDraft = (botResponse.meta as any)?.orderDraft;
-    
-    // Guardar pedido confirmado en colección separada 'orders'
-    if (orderDraft && orderDraft.confirmado) {
-        const orderId = `${conversationId}-${Date.now()}`;
-        await setDoc(doc(db, 'orders', orderId), {
-            conversationId,
-            userId: fromPhone,
-            channel: 'whatsapp',
-            createdAt: serverTimestamp(),
-            status: 'pending',
-            draft: orderDraft
-        });
-    }
-
-    // Enviar alerta por WhatsApp a los admins
-    try {
-      const notifyPhones = (whatsappCfg.notificationPhones ?? '')
-        .split(',')
-        .map((p: string) => p.trim())
-        .filter((p: string) => p.length > 8);
-
-      if (notifyPhones.length > 0 && accessToken && phoneId) {
-        const adminUrl = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
-        const adminHeaders = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
-        };
-
-        let staffBody = '';
-        if (orderDraft && orderDraft.confirmado) {
-            staffBody = `📦 *NUEVO PEDIDO CONFIRMADO*\nCliente: ${fromPhone}\n\n${botResponse.reply}`;
-        } else {
-            staffBody = `👤 *SOLICITUD ATENCIÓN*\nCliente: ${fromPhone}\nMsg: "${text}"`;
-        }
-
-        // Enviar a cada admin
-        for (const adminPhone of notifyPhones) {
-          await fetch(adminUrl, {
-            method: 'POST',
-            headers: adminHeaders,
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: adminPhone,
-              type: 'text',
-              text: { body: staffBody }
-            })
-          }).catch(e => console.error('Error enviando a admin:', e));
-        }
-      }
-    } catch (err) {
-      console.error('Error notificando staff:', err);
-    }
-  }
-
-  // Registrar Log detallado
   try {
-    const logCtx = { ...ctx, metadata: newMetadata, previousState };
-    logConversationEvent(logCtx, botResponse).catch(console.error);
-  } catch (e) { console.error(e); }
+    const entry = body.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value;
+    const messages = value?.messages ?? [];
 
-  // ----------------------------------------------------------------
-  // 6. Enviar Respuesta al Usuario (WhatsApp Cloud API)
-  // ----------------------------------------------------------------
-  if (accessToken && phoneId) {
-    try {
-      const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
-      const headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`
+    if (!messages.length) {
+      return json({ ok: true, skip: 'No messages' });
+    }
+
+    const msg = messages[0];
+    const fromPhone: string = msg.from;
+    
+    // 🟢 LÓGICA UNIFICADA DE TEXTO Y BOTONES
+    let text = '';
+
+    if (msg.type === 'text') {
+      text = msg.text?.body ?? '';
+    } else if (msg.type === 'interactive') {
+      // Si el usuario hizo clic en un botón, extraemos el título para el motor
+      const type = msg.interactive.type;
+      if (type === 'button_reply') {
+        text = msg.interactive.button_reply.title;
+      } else if (type === 'list_reply') {
+        text = msg.interactive.list_reply.title;
+      }
+    } else {
+      console.log('ℹ️ Tipo de mensaje ignorado:', msg.type);
+      return json({ ok: true, ignored: true });
+    }
+
+    if (!text.trim()) {
+      return json({ ok: true, ignored: 'Empty text' });
+    }
+
+    // 1. Gestión de Conversación en Firestore
+    const channel: Channel = 'whatsapp';
+    const conversationId = `wa:${fromPhone}`;
+    const convRef = doc(db, 'conversations', conversationId);
+    const convSnap = await getDoc(convRef);
+
+    let convData: ConversationDoc;
+
+    if (!convSnap.exists()) {
+      convData = {
+        state: null,
+        metadata: {},
+        history: [],
+        channel,
+        userId: fromPhone,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       };
+      await setDoc(convRef, convData);
+    } else {
+      convData = (convSnap.data() as ConversationDoc) || {};
+    }
 
-      // 1. Texto
-      await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: fromPhone,
-          type: 'text',
-          text: { body: botResponse.reply }
-        })
-      });
+    // 2. Lógica Timeout (5 Minutos)
+    const TIMEOUT_MS = 5 * 60 * 1000;
+    const now = Date.now();
+    const lastMsgTime = convData.lastMessageAt?.toMillis 
+      ? convData.lastMessageAt.toMillis() 
+      : (convData.updatedAt?.toMillis ? convData.updatedAt.toMillis() : now);
 
-      // 2. Imágenes (si hay)
-      if (botResponse.media && botResponse.media.length > 0) {
-        for (const m of botResponse.media) {
-          if (m.type === 'image') {
-            await fetch(url, {
+    let previousState = convData.state ?? null;
+    let previousMetadata = convData.metadata ?? {};
+    
+    if (now - lastMsgTime > TIMEOUT_MS) {
+      console.log(`⏱️ Sesión expirada para ${conversationId}.`);
+      previousState = null;
+      previousMetadata = {
+        ...previousMetadata,
+        orderDraft: null,
+        aiSlots: null,
+        aiGeneratedReply: null
+      };
+    }
+
+    const history: HistoryItem[] = (convData.history ?? []).slice(-40);
+
+    // 3. Llamada al Motor (Engine + IA)
+    const ctx: BotContext = {
+      conversationId,
+      userId: fromPhone,
+      channel,
+      text,
+      locale: 'es',
+      previousState,
+      metadata: {
+        ...previousMetadata,
+        history,
+        settings // Pasamos la configuración global
+      }
+    };
+
+    const botResponse = await processMessage(ctx);
+
+    // 4. Actualización de Estado
+    const newHistory: HistoryItem[] = [
+      ...history,
+      { from: 'user', text, ts: Date.now() },
+      { from: 'bot', text: botResponse.reply, ts: Date.now() }
+    ].slice(-40);
+
+    const newMetadata: Record<string, unknown> = {
+      ...previousMetadata,
+      ...(botResponse.meta ?? {})
+    };
+
+    let nextStateToSave = botResponse.nextState ?? previousState ?? null;
+
+    if (botResponse.shouldClearMemory) {
+      delete newMetadata.orderDraft;
+      delete newMetadata.aiSlots;
+      delete newMetadata.aiGeneratedReply;
+      nextStateToSave = null;
+    }
+
+    await updateDoc(convRef, {
+      state: nextStateToSave,
+      metadata: newMetadata,
+      history: newHistory,
+      channel,
+      userId: fromPhone,
+      updatedAt: serverTimestamp(),
+      lastMessageAt: serverTimestamp(),
+      lastMessageText: text,
+      needsHuman: botResponse.needsHuman ?? false,
+      status: botResponse.needsHuman ? 'pending' : 'open'
+    });
+
+    // 5. Notificaciones Staff
+    if (botResponse.needsHuman) {
+      const orderDraft = (botResponse.meta as any)?.orderDraft;
+      
+      // Guardar pedido
+      if (orderDraft && orderDraft.confirmado) {
+          const orderId = `${conversationId}-${Date.now()}`;
+          await setDoc(doc(db, 'orders', orderId), {
+              conversationId,
+              userId: fromPhone,
+              channel,
+              createdAt: serverTimestamp(),
+              status: 'pending',
+              draft: orderDraft
+          });
+      }
+
+      // Enviar alerta
+      try {
+        const notifyPhones = (whatsappCfg.notificationPhones ?? '')
+          .split(',')
+          .map((p: string) => p.trim())
+          .filter((p: string) => p.length > 8);
+
+        if (notifyPhones.length > 0 && whatsappCfg.accessToken && whatsappCfg.phoneNumberId) {
+          const adminUrl = `https://graph.facebook.com/v21.0/${whatsappCfg.phoneNumberId}/messages`;
+          const adminHeaders = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${whatsappCfg.accessToken}`
+          };
+
+          let staffBody = '';
+          if (orderDraft && orderDraft.confirmado) {
+              staffBody = `📦 *NUEVO PEDIDO*\nCliente: ${fromPhone}\n\n${botResponse.reply}`;
+          } else {
+              staffBody = `👤 *ATENCIÓN*\nCliente: ${fromPhone}\nMsg: "${text}"`;
+          }
+
+          for (const adminPhone of notifyPhones) {
+            await fetch(adminUrl, {
               method: 'POST',
-              headers,
+              headers: adminHeaders,
               body: JSON.stringify({
                 messaging_product: 'whatsapp',
-                to: fromPhone,
-                type: 'image',
-                image: { link: m.url, caption: m.caption ?? '' }
+                to: adminPhone,
+                type: 'text',
+                text: { body: staffBody }
               })
-            });
+            }).catch(e => console.error('Error enviando a admin:', e));
           }
         }
+      } catch (err) {
+        console.error('Error notificando staff:', err);
       }
-    } catch (e) {
-      console.error('❌ Error enviando a WhatsApp API:', e);
     }
-  }
 
-  return json({ ok: true });
+    // Registrar Log
+    try {
+      const logCtx = { ...ctx, metadata: newMetadata, previousState };
+      logConversationEvent(logCtx, botResponse).catch(console.error);
+    } catch (e) { console.error(e); }
+
+    // 6. Enviar Respuesta al Usuario (WhatsApp Cloud API)
+    if (whatsappCfg.accessToken && whatsappCfg.phoneNumberId) {
+      try {
+        const url = `https://graph.facebook.com/v21.0/${whatsappCfg.phoneNumberId}/messages`;
+        const headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${whatsappCfg.accessToken}`
+        };
+
+        // 🟢 AQUÍ ESTÁ LA MAGIA DE LOS BOTONES
+        let payload: any = {
+          messaging_product: 'whatsapp',
+          to: fromPhone
+        };
+
+        if (botResponse.interactive) {
+          // Si el motor generó botones, enviamos tipo 'interactive'
+          payload.type = 'interactive';
+          payload.interactive = botResponse.interactive;
+        } else {
+          // Si no, enviamos texto normal
+          payload.type = 'text';
+          payload.text = { body: botResponse.reply };
+        }
+
+        await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        // Imágenes adicionales
+        if (botResponse.media && botResponse.media.length > 0) {
+          for (const m of botResponse.media) {
+            if (m.type === 'image') {
+              await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  messaging_product: 'whatsapp',
+                  to: fromPhone,
+                  type: 'image',
+                  image: { link: m.url, caption: m.caption ?? '' }
+                })
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('❌ Error enviando a WhatsApp API:', e);
+      }
+    }
+
+    return json({ ok: true });
+
+  } catch (err) {
+    console.error('❌ Error webhook:', err);
+    return json({ ok: false, error: 'internal_error' }, { status: 500 });
+  }
 };
