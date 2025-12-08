@@ -12,6 +12,7 @@ export type FlowOption = {
 export type FlowNode = {
   id: string;
   text: string;        // Mensaje principal del bot
+  mediaUrl?: string;
   options: FlowOption[];
 };
 
@@ -67,8 +68,8 @@ export const defaultSettings: Settings = {
   },
   hours: {
     timezone: 'America/Santiago',
-    weekdays: '10:00 – 19:00',
-    saturday: '10:00 – 14:00',
+    weekdays: '10:00 – 21:00',
+    saturday: '10:00 – 21:00',
     sunday: 'Según disponibilidad, consultar por WhatsApp.'
   },
   messages: {
@@ -93,6 +94,7 @@ export const defaultSettings: Settings = {
       welcome: {
         id: 'welcome',
         text: '¡Hola! 👋 Bienvenido a Delicias Porteñas. Por favor elige una opción:',
+        mediaUrl: '',
         options: [
           { id: 'btn_w1', label: '1. Ver Catálogo y Hacer Pedido🎂', action: 'template', target: 'node_1' },
           { id: 'btn_w2', label: '2. Horarios y Sucursales📍', action: 'template', target: 'node_2' },

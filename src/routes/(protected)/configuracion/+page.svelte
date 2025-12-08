@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { db } from '$lib/firebase';
+  import { db, storage } from '$lib/firebase'; // Asegúrate de importar storage
   import { doc, getDoc, setDoc } from 'firebase/firestore';
+  import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
   import { defaultSettings, type Settings } from '$lib/settings';
 
-  let settings: Settings = structuredClone(defaultSettings);
+let settings: Settings = structuredClone(defaultSettings);
   let loading = true;
   let saving = false;
+  let uploadingImage = false; // Estado para loader de imagen
   let error: string | null = null;
   let success = false;
 
@@ -62,6 +64,63 @@
       saving = false;
       setTimeout(() => { success = false; }, 2500);
     }
+  }
+
+// Lógica de Redimensión y Subida
+  async function handleImageUpload(e: Event, nodeId: string) {
+    const target = e.target as HTMLInputElement;
+    if (!target.files || target.files.length === 0) return;
+
+    const file = target.files[0];
+    uploadingImage = true;
+
+    try {
+      // 1. Redimensionar imagen (250x250)
+      const resizedBlob = await resizeImage(file, 250, 250);
+      
+      // 2. Subir a Firebase Storage
+      const storageRef = ref(storage, `bot_assets/${nodeId}_image_${Date.now()}.jpg`);
+      await uploadBytes(storageRef, resizedBlob);
+      const url = await getDownloadURL(storageRef);
+
+      // 3. Asignar URL al nodo correspondiente
+      // @ts-ignore - Acceso dinámico seguro porque conocemos las claves
+      if(settings.flow.nodes[nodeId]) {
+         // @ts-ignore
+         settings.flow.nodes[nodeId].mediaUrl = url;
+      }
+
+    } catch (err) {
+      console.error('Error subiendo imagen:', err);
+      alert('Error al procesar la imagen');
+    } finally {
+      uploadingImage = false;
+    }
+  }
+
+  function resizeImage(file: File, width: number, height: number): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('No canvas context');
+
+        // Dibujar y redimensionar (estilo "cover" simple)
+        // Ojo: Esto estirará la imagen si no es cuadrada. 
+        // Si prefieres "fit", la lógica es más compleja, pero "fill" suele servir para logos.
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject('Canvas blob error');
+        }, 'image/jpeg', 0.9);
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
   }
 
   // Helper para iterar sobre los nodos en orden
@@ -134,6 +193,21 @@
                 </div>
                 
                 <div class="p-4 space-y-4">
+                  <div class="p-4 space-y-4">
+                  {#if key === 'welcome'}
+                    <div class="space-y-2 pb-2 border-b border-slate-100">
+                      <span class="text-[10px] font-medium text-slate-500">Imagen de Cabecera (Se redimensiona a 250x250)</span>
+                      <div class="flex items-center gap-3">
+                        {#if node.mediaUrl}
+                          <img src={node.mediaUrl} alt="Header" class="w-12 h-12 rounded object-cover border border-slate-200" />
+                        {/if}
+                        <label class="cursor-pointer inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] hover:bg-slate-50 transition">
+                          <input type="file" accept="image/*" class="hidden" on:change={(e) => handleImageUpload(e, key)} disabled={uploadingImage} />
+                          {uploadingImage ? 'Procesando...' : (node.mediaUrl ? 'Cambiar Imagen' : 'Subir Imagen')}
+                        </label>
+                      </div>
+                    </div>
+                  {/if}
                   <div class="space-y-1">
                     <label class="text-[10px] font-medium text-slate-500">Mensaje del Bot</label>
                     <textarea 
@@ -214,13 +288,11 @@
 
       {#if activeTab === 'whatsapp'}
         <div class="grid gap-6 p-6 md:grid-cols-2">
-          
-          <div class="space-y-4">
+           <div class="space-y-4">
             <h2 class="text-sm font-semibold text-slate-900 border-b border-slate-100 pb-2">Conexión con Meta</h2>
-            
             <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 border border-slate-100">
-              <div class="text-[11px] font-medium text-slate-800">Habilitar Bot WhatsApp</div>
-              <input type="checkbox" bind:checked={settings.whatsapp.enabled} class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600" />
+            <div class="text-[11px] font-medium text-slate-800">Habilitar Bot WhatsApp</div>
+            <input type="checkbox" bind:checked={settings.whatsapp.enabled} class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600" />
             </div>
 
             <div class="space-y-1">
@@ -240,38 +312,90 @@
             </div>
           </div>
 
-          <div class="space-y-4">
+         <div class="space-y-4">
             <h2 class="text-sm font-semibold text-slate-900 border-b border-slate-100 pb-2">Teléfonos y Alertas</h2>
-            
             <div class="space-y-1">
               <label for="chatbotNumber" class="text-[11px] font-medium text-indigo-700">Número del Chatbot (Público)</label>
-              <input 
-                id="chatbotNumber" 
-                bind:value={settings.whatsapp.chatbotNumber} 
-                class="w-full rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500" 
-                placeholder="56912345678" 
-              />
-              <p class="text-[9px] text-slate-400">Este es el número que ven tus clientes. Se usará para generar enlaces.</p>
+              <input id="chatbotNumber" bind:value={settings.whatsapp.chatbotNumber} class="w-full rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500" placeholder="56912345678" />
             </div>
-
             <div class="my-2 border-t border-slate-100"></div>
-
             <div class="space-y-1">
-              <label for="notificationPhones" class="text-[11px] font-medium text-slate-700">Teléfonos Administrativos (Reciben Alertas)</label>
-              <textarea 
-                id="notificationPhones" 
-                rows="4" 
-                bind:value={settings.whatsapp.notificationPhones} 
-                placeholder="56911111111, 56922222222" 
-                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 font-mono"
-              ></textarea>
-              <p class="text-[9px] text-slate-400">
-                Escribe los números (separados por coma) del staff que recibirá avisos de <b>pedidos confirmados</b> y <b>solicitudes de humano</b>.
-              </p>
+              <label for="notificationPhones" class="text-[11px] font-medium text-slate-700">Teléfonos Administrativos</label>
+              <textarea id="notificationPhones" rows="4" bind:value={settings.whatsapp.notificationPhones} placeholder="56911111111, 56922222222" class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 font-mono"></textarea>
             </div>
           </div>
         </div>
       {/if}
+
+      {#if activeTab === 'hours'}
+        <div class="grid gap-6 p-6 md:grid-cols-2">
+          <div class="space-y-3">
+            <h2 class="text-sm font-semibold text-slate-900">Días hábiles</h2>
+            <div class="space-y-1">
+              <label for="timezone" class="text-[11px] font-medium text-slate-700">Zona horaria</label>
+              <input id="timezone" bind:value={settings.hours.timezone} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
+            </div>
+            <div class="space-y-1">
+              <label for="weekdays" class="text-[11px] font-medium text-slate-700">Lunes a viernes</label>
+              <input id="weekdays" bind:value={settings.hours.weekdays} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
+            </div>
+          </div>
+          <div class="space-y-3">
+            <h2 class="text-sm font-semibold text-slate-900">Fin de semana</h2>
+            <div class="space-y-1">
+              <label for="saturday" class="text-[11px] font-medium text-slate-700">Sábado</label>
+              <input id="saturday" bind:value={settings.hours.saturday} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
+            </div>
+            <div class="space-y-1">
+              <label for="sunday" class="text-[11px] font-medium text-slate-700">Domingo / festivos</label>
+              <textarea id="sunday" rows="3" bind:value={settings.hours.sunday} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
+            </div>
+          </div>
+        </div>
       {/if}
+
+      {#if activeTab === 'messages'}
+        <div class="grid gap-6 p-6 md:grid-cols-2">
+          <div class="space-y-3">
+            <h2 class="text-sm font-semibold text-slate-900">Mensajes base</h2>
+            <div class="space-y-1">
+              <label for="welcomeMessage" class="text-[11px] font-medium text-slate-700">Bienvenida (Default)</label>
+              <textarea id="welcomeMessage" rows="4" bind:value={settings.messages.welcome} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
+            </div>
+            <div class="space-y-1">
+              <label for="inactivityMessage" class="text-[11px] font-medium text-slate-700">Inactividad</label>
+              <textarea id="inactivityMessage" rows="3" bind:value={settings.messages.inactivity} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <h2 class="text-sm font-semibold text-slate-900">Handoff y cierre</h2>
+            <div class="space-y-1">
+              <label for="handoffMessage" class="text-[11px] font-medium text-slate-700">Derivación a humano</label>
+              <textarea id="handoffMessage" rows="3" bind:value={settings.messages.handoff} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
+            </div>
+            <div class="space-y-1">
+              <label for="closingMessage" class="text-[11px] font-medium text-slate-700">Cierre</label>
+              <textarea id="closingMessage" rows="3" bind:value={settings.messages.closing} class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60"></textarea>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      {#if activeTab === 'advanced'}
+        <div class="grid gap-6 p-6 md:grid-cols-2">
+          <div class="space-y-3">
+            <h2 class="text-sm font-semibold text-slate-900">Webhooks</h2>
+            <div class="space-y-1">
+              <label for="publicBaseUrl" class="text-[11px] font-medium text-slate-700">URL pública base</label>
+              <input id="publicBaseUrl" bind:value={settings.api.publicBaseUrl} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
+            </div>
+            <div class="space-y-1">
+              <label for="webhookSecret" class="text-[11px] font-medium text-slate-700">Webhook Secret</label>
+              <input id="webhookSecret" type="password" bind:value={settings.api.webhookSecret} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/60" />
+            </div>
+          </div>
+        </div>
+      {/if}
+    {/if}
   </div>
 </div>
