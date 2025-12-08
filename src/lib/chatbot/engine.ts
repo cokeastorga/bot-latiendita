@@ -304,6 +304,12 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
   const lineBreak = ctx.channel === 'whatsapp' ? '\n' : '\n';
   let menuText = node.text;
   let interactive = undefined;
+  let media: Array<{ type: 'image'; url: string; caption?: string }> | undefined = undefined;
+
+  // 1. DETECCIÓN DE IMAGEN
+  if (node.mediaUrl && node.mediaUrl.length > 5) {
+    media = [{ type: 'image', url: node.mediaUrl, caption: '' }];
+  }
 
   // 🔴 LÓGICA DE BOTONES PARA WHATSAPP
   // Solo si es WhatsApp y hay entre 1 y 3 opciones
@@ -334,6 +340,7 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
   return {
     reply: menuText,
     interactive: interactive as any, // Payload interactivo
+    media: media,
     intent: { id: 'smalltalk', confidence: 1, reason: 'flow_node' },
     nextState: 'awaiting_menu_selection',
     meta: { 
