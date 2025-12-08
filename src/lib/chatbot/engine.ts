@@ -224,7 +224,6 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     currentFlowId = 'welcome';
   }
 
-  // 1. NAVEGACIÓN
   if (flowActive) {
     const currentNode = flowNodes[currentFlowId];
     if (currentNode && currentNode.options) {
@@ -256,7 +255,6 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     }
   }
 
-  // 2. DETECCIÓN NORMAL
   const ruleIntent = detectIntent(ctx.text, ctx.previousState);
 
   if (ruleIntent.id === 'greeting' && flowActive) {
@@ -293,16 +291,20 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
     meta: { ...ctx.metadata }
   };
 }
+
 function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResponse {
   const lineBreak = ctx.channel === 'whatsapp' ? '\n' : '\n';
   let menuText = node.text;
   let interactive = undefined;
   
-  // Variable para media (solo se usará si NO es WhatsApp o si tiene muchas opciones)
+  // 1. SIEMPRE PREPARAMOS LA IMAGEN SI EXISTE
+  // (La enviamos en 'media' para que el webhook la envíe primero)
   let media: Array<{ type: 'image'; url: string; caption?: string }> | undefined = undefined;
-  const hasImage = node.mediaUrl && node.mediaUrl.length > 5;
+  if (node.mediaUrl && node.mediaUrl.length > 5) {
+    media = [{ type: 'image', url: node.mediaUrl, caption: '' }];
+  }
 
-  // 1. CASO WHATSAPP CON BOTONES (1 a 3 opciones) -> IMAGEN EN HEADER
+  // 2. BOTONES WHATSAPP (Sin Header, para máxima estabilidad)
   if (ctx.channel === 'whatsapp' && node.options && node.options.length > 0 && node.options.length <= 3) {
     const buttons = node.options.map((opt: any) => ({
       type: 'reply',
@@ -314,38 +316,20 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
 
     interactive = {
       type: 'button',
-      // 🟡 AQUÍ ESTÁ LA SOLUCIÓN: Metemos la imagen como HEADER del mensaje interactivo
-      ...(hasImage && {
-        header: {
-          type: 'image',
-          image: { link: node.mediaUrl }
-        }
-      }),
       body: { text: node.text },
       action: { buttons }
     };
-    
-    // Al usar header, NO definimos 'media' externo para evitar duplicados
     menuText = node.text; 
   } 
-  
-  // 2. OTROS CASOS (Web, muchas opciones, sin botones)
-  else {
-    // Aquí sí usamos el adjunto normal
-    if (hasImage) {
-      media = [{ type: 'image', url: node.mediaUrl!, caption: '' }];
-    }
-    
-    if (node.options && node.options.length > 0) {
-      const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
-      menuText += `${lineBreak}${lineBreak}${list}`;
-    }
+  else if (node.options && node.options.length > 0) {
+    const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
+    menuText += `${lineBreak}${lineBreak}${list}`;
   }
 
   return {
     reply: menuText,
     interactive: interactive as any,
-    media: media, // Se enviará solo si no se usó interactive con header
+    media: media, // Enviamos la imagen adjunta
     intent: { id: 'smalltalk', confidence: 1, reason: 'flow_node' },
     nextState: 'awaiting_menu_selection',
     meta: { 

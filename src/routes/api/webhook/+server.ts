@@ -1,3 +1,4 @@
+// src/routes/api/webhook/+server.ts
 import { getGlobalSettings } from '$lib/settings.server';
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
@@ -28,7 +29,6 @@ type ConversationDoc = {
   lastMessageAt?: any;
 };
 
-// GET: Verificación
 export const GET: RequestHandler = async ({ url }) => {
   const mode = url.searchParams.get('hub.mode');
   const token = url.searchParams.get('hub.verify_token');
@@ -42,7 +42,6 @@ export const GET: RequestHandler = async ({ url }) => {
   return new Response('Forbidden', { status: 403 });
 };
 
-// POST: Procesamiento
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json().catch(() => null);
   if (!body) return json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
@@ -61,7 +60,6 @@ export const POST: RequestHandler = async ({ request }) => {
     const msg = messages[0];
     const fromPhone: string = msg.from;
     
-    // Extracción de Texto
     let text = '';
     if (msg.type === 'text') {
       text = msg.text?.body ?? '';
@@ -136,10 +134,9 @@ export const POST: RequestHandler = async ({ request }) => {
       status: botResponse.needsHuman ? 'pending' : 'open'
     });
 
-    // 5. Notificaciones (Simplificado)
     if (botResponse.needsHuman && whatsappCfg.notificationPhones) { /* ... */ }
 
-    // 6. ENVIAR A WHATSAPP (Lógica Robusta)
+    // 6. ENVIAR A WHATSAPP (Estrategia Segura)
     if (whatsappCfg.accessToken && whatsappCfg.phoneNumberId) {
       const url = `https://graph.facebook.com/v21.0/${whatsappCfg.phoneNumberId}/messages`;
       const headers = {
@@ -147,52 +144,45 @@ export const POST: RequestHandler = async ({ request }) => {
         Authorization: `Bearer ${whatsappCfg.accessToken}`
       };
 
+      // PASO 1: Intentar enviar imagen (Si existe)
+      // En un bloque try/catch PROPIO para que si falla, no detenga el resto.
+      if (botResponse.media && botResponse.media.length > 0) {
+        try {
+          for (const m of botResponse.media) {
+            if (m.type === 'image') {
+              await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  messaging_product: 'whatsapp',
+                  to: fromPhone,
+                  type: 'image',
+                  image: { link: m.url, caption: '' } // Enviamos imagen sola primero
+                })
+              });
+            }
+          }
+        } catch (imgErr) {
+          console.error('⚠️ Error enviando imagen (se continuará con texto):', imgErr);
+        }
+      }
+
+      // PASO 2: Enviar Mensaje Principal (Texto o Botones)
       try {
         let payload: any = { messaging_product: 'whatsapp', to: fromPhone };
 
-        // Prioridad 1: Interactivo (Botones + Header opcional)
         if (botResponse.interactive) {
           payload.type = 'interactive';
           payload.interactive = botResponse.interactive;
-
-          // INTENTO 1: Enviar con todo (incluyendo imagen si la tiene)
-          const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-          
-          // Si falla y tenía header, reintentamos SIN header
-          if (!res.ok) {
-            const errData = await res.json();
-            console.warn('⚠️ Falló envío interactivo completo. Reintentando sin header...', errData);
-
-            if (payload.interactive.header) {
-              delete payload.interactive.header; // Quitamos la imagen
-              await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) }); // Reintento
-            }
-          }
-        } 
-        // Prioridad 2: Texto plano (Fallback final)
-        else {
-          // Si hay imagen suelta, la enviamos aparte
-          if (botResponse.media && botResponse.media.length > 0) {
-             for (const m of botResponse.media) {
-                if (m.type === 'image') {
-                  await fetch(url, {
-                    method: 'POST', headers,
-                    body: JSON.stringify({
-                      messaging_product: 'whatsapp', to: fromPhone, type: 'image',
-                      image: { link: m.url, caption: botResponse.reply }
-                    })
-                  });
-                }
-             }
-          } else {
-             payload.type = 'text';
-             payload.text = { body: botResponse.reply };
-             await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-          }
+        } else {
+          payload.type = 'text';
+          payload.text = { body: botResponse.reply };
         }
 
+        await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+
       } catch (e) {
-        console.error('❌ Error crítico enviando a WhatsApp:', e);
+        console.error('❌ Error crítico enviando mensaje:', e);
       }
     }
 
