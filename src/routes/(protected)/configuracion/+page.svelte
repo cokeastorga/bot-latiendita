@@ -240,7 +240,7 @@
 
             <div class="space-y-1">
               <label for="verifyToken" class="text-[11px] font-medium text-slate-700">Verify Token</label>
-              <input id="verifyToken" bind:value={settings.whatsapp.verifyToken} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500" />
+              <input id="verifyToken"  type="password" bind:value={settings.whatsapp.verifyToken} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500" />
             </div>
           </div>
 
