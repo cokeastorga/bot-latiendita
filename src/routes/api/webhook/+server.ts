@@ -259,7 +259,7 @@ export const POST: RequestHandler = async ({ request }) => {
       logConversationEvent(logCtx, botResponse).catch(console.error);
     } catch (e) { console.error(e); }
 
-    // 6. Enviar Respuesta al Usuario (WhatsApp Cloud API)
+   // 6. Enviar Respuesta al Usuario (WhatsApp Cloud API)
     if (whatsappCfg.accessToken && whatsappCfg.phoneNumberId) {
       try {
         const url = `https://graph.facebook.com/v21.0/${whatsappCfg.phoneNumberId}/messages`;
@@ -268,29 +268,7 @@ export const POST: RequestHandler = async ({ request }) => {
           Authorization: `Bearer ${whatsappCfg.accessToken}`
         };
 
-        // 🟢 AQUÍ ESTÁ LA MAGIA DE LOS BOTONES
-        let payload: any = {
-          messaging_product: 'whatsapp',
-          to: fromPhone
-        };
-
-        if (botResponse.interactive) {
-          // Si el motor generó botones, enviamos tipo 'interactive'
-          payload.type = 'interactive';
-          payload.interactive = botResponse.interactive;
-        } else {
-          // Si no, enviamos texto normal
-          payload.type = 'text';
-          payload.text = { body: botResponse.reply };
-        }
-
-        await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload)
-        });
-
-        // Imágenes adicionales
+        // PASO 1: ENVIAR IMAGEN PRIMERO (Si existe)
         if (botResponse.media && botResponse.media.length > 0) {
           for (const m of botResponse.media) {
             if (m.type === 'image') {
@@ -307,6 +285,27 @@ export const POST: RequestHandler = async ({ request }) => {
             }
           }
         }
+
+        // PASO 2: ENVIAR TEXTO O BOTONES DESPUÉS
+        let payload: any = {
+          messaging_product: 'whatsapp',
+          to: fromPhone
+        };
+
+        if (botResponse.interactive) {
+          payload.type = 'interactive';
+          payload.interactive = botResponse.interactive;
+        } else {
+          payload.type = 'text';
+          payload.text = { body: botResponse.reply };
+        }
+
+        await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
       } catch (e) {
         console.error('❌ Error enviando a WhatsApp API:', e);
       }
