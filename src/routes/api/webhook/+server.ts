@@ -1,4 +1,3 @@
-// src/routes/api/webhook/+server.ts
 import { getGlobalSettings } from '$lib/settings.server';
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
@@ -17,12 +16,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 
-type HistoryItem = {
-  from: 'user' | 'bot';
-  text: string;
-  ts: number;
-};
-
+type HistoryItem = { from: 'user' | 'bot'; text: string; ts: number; };
 type ConversationDoc = {
   state?: string | null;
   metadata?: Record<string, unknown>;
@@ -39,7 +33,6 @@ export const GET: RequestHandler = async ({ url }) => {
   const mode = url.searchParams.get('hub.mode');
   const token = url.searchParams.get('hub.verify_token');
   const challenge = url.searchParams.get('hub.challenge');
-
   const settings = await getGlobalSettings();
   const VERIFY_TOKEN = settings.whatsapp.verifyToken || 'latiendita123';
 
@@ -68,24 +61,21 @@ export const POST: RequestHandler = async ({ request }) => {
     const msg = messages[0];
     const fromPhone: string = msg.from;
     
-    // Extracción de Texto o Respuesta de Botón
+    // Extracción de Texto
     let text = '';
     if (msg.type === 'text') {
       text = msg.text?.body ?? '';
     } else if (msg.type === 'interactive') {
       const type = msg.interactive.type;
-      if (type === 'button_reply') {
-        text = msg.interactive.button_reply.title;
-      } else if (type === 'list_reply') {
-        text = msg.interactive.list_reply.title;
-      }
+      if (type === 'button_reply') text = msg.interactive.button_reply.title;
+      else if (type === 'list_reply') text = msg.interactive.list_reply.title;
     } else {
       return json({ ok: true, ignored: true });
     }
 
     if (!text.trim()) return json({ ok: true, ignored: 'Empty text' });
 
-    // 1. Cargar Conversación
+    // 1. Gestión Conversación
     const channel: Channel = 'whatsapp';
     const conversationId = `wa:${fromPhone}`;
     const convRef = doc(db, 'conversations', conversationId);
@@ -102,7 +92,7 @@ export const POST: RequestHandler = async ({ request }) => {
       convData = (convSnap.data() as ConversationDoc) || {};
     }
 
-    // 2. Timeout (5 min)
+    // 2. Timeout
     const TIMEOUT_MS = 5 * 60 * 1000;
     const now = Date.now();
     const lastMsgTime = convData.lastMessageAt?.toMillis ? convData.lastMessageAt.toMillis() : now;
@@ -114,7 +104,7 @@ export const POST: RequestHandler = async ({ request }) => {
       previousMetadata = { ...previousMetadata, orderDraft: null, aiSlots: null };
     }
 
-    // 3. Motor Chatbot
+    // 3. Motor
     const history = (convData.history ?? []).slice(-40);
     const ctx: BotContext = {
       conversationId, userId: fromPhone, channel, text, locale: 'es',
@@ -123,7 +113,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const botResponse = await processMessage(ctx);
 
-    // 4. Actualizar DB
+    // 4. Guardar
     const newHistory: HistoryItem[] = [
       ...history,
       { from: 'user', text, ts: Date.now() },
@@ -140,22 +130,16 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     await updateDoc(convRef, {
-      state: nextStateToSave,
-      metadata: newMetadata,
-      history: newHistory,
-      updatedAt: serverTimestamp(), 
-      lastMessageAt: serverTimestamp(), 
-      lastMessageText: text,
+      state: nextStateToSave, metadata: newMetadata, history: newHistory,
+      updatedAt: serverTimestamp(), lastMessageAt: serverTimestamp(), lastMessageText: text,
       needsHuman: botResponse.needsHuman ?? false,
       status: botResponse.needsHuman ? 'pending' : 'open'
     });
 
-    // 5. Notificaciones Staff (Opcional, resumido)
-    if (botResponse.needsHuman && whatsappCfg.notificationPhones && whatsappCfg.accessToken) {
-       // ... Lógica de notificación a admins ...
-    }
+    // 5. Notificaciones (Simplificado)
+    if (botResponse.needsHuman && whatsappCfg.notificationPhones) { /* ... */ }
 
-    // 6. ENVIAR RESPUESTA AL USUARIO (WhatsApp Cloud API)
+    // 6. ENVIAR A WHATSAPP (Lógica Robusta)
     if (whatsappCfg.accessToken && whatsappCfg.phoneNumberId) {
       const url = `https://graph.facebook.com/v21.0/${whatsappCfg.phoneNumberId}/messages`;
       const headers = {
@@ -163,42 +147,53 @@ export const POST: RequestHandler = async ({ request }) => {
         Authorization: `Bearer ${whatsappCfg.accessToken}`
       };
 
-      // 🟡 PARTE CLAVE: ENVIAR IMAGEN PRIMERO
-      // El engine nos devuelve 'media' si el nodo tiene imagen configurada
-      if (botResponse.media && botResponse.media.length > 0) {
-        for (const m of botResponse.media) {
-          if (m.type === 'image') {
-            await fetch(url, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: fromPhone,
-                type: 'image',
-                // Enviamos el link generado por nuestro endpoint /api/image/...
-                image: { link: m.url, caption: m.caption ?? '' }
-              })
-            }).catch(e => console.error('Error enviando imagen:', e));
+      try {
+        let payload: any = { messaging_product: 'whatsapp', to: fromPhone };
+
+        // Prioridad 1: Interactivo (Botones + Header opcional)
+        if (botResponse.interactive) {
+          payload.type = 'interactive';
+          payload.interactive = botResponse.interactive;
+
+          // INTENTO 1: Enviar con todo (incluyendo imagen si la tiene)
+          const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+          
+          // Si falla y tenía header, reintentamos SIN header
+          if (!res.ok) {
+            const errData = await res.json();
+            console.warn('⚠️ Falló envío interactivo completo. Reintentando sin header...', errData);
+
+            if (payload.interactive.header) {
+              delete payload.interactive.header; // Quitamos la imagen
+              await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) }); // Reintento
+            }
+          }
+        } 
+        // Prioridad 2: Texto plano (Fallback final)
+        else {
+          // Si hay imagen suelta, la enviamos aparte
+          if (botResponse.media && botResponse.media.length > 0) {
+             for (const m of botResponse.media) {
+                if (m.type === 'image') {
+                  await fetch(url, {
+                    method: 'POST', headers,
+                    body: JSON.stringify({
+                      messaging_product: 'whatsapp', to: fromPhone, type: 'image',
+                      image: { link: m.url, caption: botResponse.reply }
+                    })
+                  });
+                }
+             }
+          } else {
+             payload.type = 'text';
+             payload.text = { body: botResponse.reply };
+             await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
           }
         }
+
+      } catch (e) {
+        console.error('❌ Error crítico enviando a WhatsApp:', e);
       }
-
-      // 🟡 LUEGO ENVIAR TEXTO O BOTONES
-      let payload: any = {
-        messaging_product: 'whatsapp',
-        to: fromPhone
-      };
-
-      if (botResponse.interactive) {
-        payload.type = 'interactive';
-        payload.interactive = botResponse.interactive;
-      } else {
-        payload.type = 'text';
-        payload.text = { body: botResponse.reply };
-      }
-
-      await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) })
-        .catch(e => console.error('Error enviando mensaje:', e));
     }
 
     return json({ ok: true });
