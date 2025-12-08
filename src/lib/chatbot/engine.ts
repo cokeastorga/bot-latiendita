@@ -30,6 +30,7 @@ type SettingsMeta = {
     nodes?: Record<string, {
       id: string;
       text: string;
+      mediaUrl?: string; // URL de la imagen
       options: Array<{
         id: string;
         label: string;
@@ -69,9 +70,9 @@ export interface BotResponse {
   meta?: Record<string, unknown>;
   media?: Array<{ type: 'image'; url: string; caption?: string }>;
   shouldClearMemory?: boolean; 
-  // 👇 NUEVO: Para botones
   interactive?: {
     type: 'button' | 'list';
+    header?: { type: 'image'; image: { link: string } }; // 👈 SOPORTE PARA HEADER
     body: { text: string };
     action: any;
   };
@@ -109,10 +110,11 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
   const settings = (((ctx.metadata ?? {}) as any).settings ?? {}) as SettingsMeta;
   const messages = settings.messages ?? {};
   const hours = settings.hours ?? {};
-  const flow = settings.flow?.welcomeMenu ?? {};
-  const options = flow.options ?? [];
-  const botNumber = settings.whatsapp?.chatbotNumber;
+  const flow = settings.flow?.welcomeMenu ?? {}; 
+  // Nota: Para el flujo nuevo usamos settings.flow.nodes.welcome directamente en el case 'greeting'
+  // pero mantenemos compatibilidad por si acaso.
   
+  const botNumber = settings.whatsapp?.chatbotNumber;
   const lineBreak = isWhatsApp ? '\n' : '\n';
   const aiReply = (ctx.metadata as any)?.aiGeneratedReply as string | undefined;
 
@@ -123,12 +125,17 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
 
   switch (intent.id) {
     case 'greeting': {
-      const welcomeNode = {
-        text: flow.headerText || 'Hola, elige una opción:',
-        options: options
-      };
-      // Forzamos la respuesta de nodo para generar botones
-      return formatNodeResponse(welcomeNode, 'welcome', ctx);
+      // Cargamos el nodo 'welcome' de la nueva estructura
+      const welcomeNode = settings.flow?.nodes?.['welcome'];
+      
+      if (welcomeNode) {
+        return formatNodeResponse(welcomeNode, 'welcome', ctx);
+      }
+      
+      // Fallback si no existe la config nueva
+      reply = 'Hola, bienvenido.';
+      nextState = 'idle';
+      break;
     }
 
     case 'smalltalk': {
@@ -193,7 +200,7 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
         const draft: OrderDraft = { producto: producto.nombre };
         return await buildProductOrderResponse(producto, draft, ctx, intent, lineBreak, aiReply);
       }
-      reply = aiReply || `No estoy seguro. Prueba "Hola".`;
+      reply = aiReply || `No estoy seguro. Prueba "Ver menú".`;
       nextState = 'idle';
       break;
     }
@@ -306,19 +313,16 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
   let interactive = undefined;
   let media: Array<{ type: 'image'; url: string; caption?: string }> | undefined = undefined;
 
-  // 1. DETECCIÓN DE IMAGEN
-  if (node.mediaUrl && node.mediaUrl.length > 5) {
-    media = [{ type: 'image', url: node.mediaUrl, caption: '' }];
-  }
+  // Lógica de Imagen
+  const hasImage = node.mediaUrl && node.mediaUrl.length > 5;
 
-  // 🔴 LÓGICA DE BOTONES PARA WHATSAPP
-  // Solo si es WhatsApp y hay entre 1 y 3 opciones
+  // CASO 1: WHATSAPP CON BOTONES (1-3 opciones)
+  // Aquí incrustamos la imagen en el HEADER del mensaje interactivo
   if (ctx.channel === 'whatsapp' && node.options && node.options.length > 0 && node.options.length <= 3) {
     const buttons = node.options.map((opt: any) => ({
       type: 'reply',
       reply: {
         id: opt.id,
-        // TRUNCAMOS a 20 caracteres porque WhatsApp falla si es más largo
         title: opt.label.substring(0, 20) 
       }
     }));
@@ -326,20 +330,35 @@ function formatNodeResponse(node: any, nodeId: string, ctx: BotContext): BotResp
     interactive = {
       type: 'button',
       body: { text: node.text },
-      action: { buttons }
+      action: { buttons },
+      // 👇 MAGIA: Si hay imagen, la ponemos en el header
+      ...(hasImage && {
+        header: {
+          type: 'image',
+          image: { link: node.mediaUrl }
+        }
+      })
     };
-    // El texto principal no lleva la lista porque van los botones
+    
+    // Al usar header, NO enviamos media por separado para no duplicar
     menuText = node.text; 
   } 
-  else if (node.options && node.options.length > 0) {
-    // Fallback: Lista de texto para Web o si hay más de 3 opciones
-    const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
-    menuText += `${lineBreak}${lineBreak}${list}`;
+  // CASO 2: FALLBACK (Web o lista larga)
+  else {
+    // Si hay imagen, la enviamos como adjunto normal
+    if (hasImage) {
+      media = [{ type: 'image', url: node.mediaUrl!, caption: '' }];
+    }
+    
+    if (node.options && node.options.length > 0) {
+      const list = node.options.map((opt: any, i: number) => `${i + 1}. ${opt.label}`).join(lineBreak);
+      menuText += `${lineBreak}${lineBreak}${list}`;
+    }
   }
 
   return {
     reply: menuText,
-    interactive: interactive as any, // Payload interactivo
+    interactive: interactive as any,
     media: media,
     intent: { id: 'smalltalk', confidence: 1, reason: 'flow_node' },
     nextState: 'awaiting_menu_selection',
