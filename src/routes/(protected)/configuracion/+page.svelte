@@ -77,8 +77,8 @@
     { id: 'general', label: 'General', desc: 'Nombre y canal.' },
     { id: 'menu', label: 'Flujo de Menú', desc: 'Configura la navegación.' },
     { id: 'whatsapp', label: 'WhatsApp', desc: 'Credenciales API.' },
-    { id: 'hours', label: 'Horarios', desc: 'Atención.' },
-    { id: 'messages', label: 'Mensajes', desc: 'Textos base.' }
+    //{ id: 'hours', label: 'Horarios', desc: 'Atención.' },
+    //{ id: 'messages', label: 'Mensajes', desc: 'Textos base.' }
   ];
 </script>
 
