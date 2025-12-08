@@ -88,10 +88,6 @@
 
 <div class="flex flex-col gap-4 pb-10">
   <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-    <div>
-      <h1 class="text-lg font-semibold text-slate-900">Configuración</h1>
-      <p class="text-xs text-slate-500">Administra el comportamiento del bot.</p>
-    </div>
     <div class="flex items-center gap-2">
       {#if success}
         <span class="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">✅ Guardado</span>
