@@ -217,17 +217,62 @@
       {/if}
 
       {#if activeTab === 'whatsapp'}
-        <div class="p-6">
-          <h2 class="text-sm font-semibold text-slate-900 mb-4">WhatsApp Cloud API</h2>
-          <div class="space-y-4 max-w-md">
-             <div>
-               <label class="block text-xs font-medium text-slate-700 mb-1">Phone Number ID</label>
-               <input bind:value={settings.whatsapp.phoneNumberId} class="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-mono"/>
-             </div>
-             <div>
-               <label class="block text-xs font-medium text-slate-700 mb-1">Access Token</label>
-               <input type="password" bind:value={settings.whatsapp.accessToken} class="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-mono"/>
-             </div>
+        <div class="grid gap-6 p-6 md:grid-cols-2">
+          
+          <div class="space-y-4">
+            <h2 class="text-sm font-semibold text-slate-900 border-b border-slate-100 pb-2">Conexión con Meta</h2>
+            
+            <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 border border-slate-100">
+              <div class="text-[11px] font-medium text-slate-800">Habilitar Bot WhatsApp</div>
+              <input type="checkbox" bind:checked={settings.whatsapp.enabled} class="h-4 w-7 cursor-pointer rounded-full border border-slate-300 bg-white accent-indigo-600" />
+            </div>
+
+            <div class="space-y-1">
+              <label for="phoneNumberId" class="text-[11px] font-medium text-slate-700">Phone Number ID</label>
+              <input id="phoneNumberId" bind:value={settings.whatsapp.phoneNumberId} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500" placeholder="Ej: 100561234567890" />
+              <p class="text-[9px] text-slate-400">ID único de la API de WhatsApp Cloud.</p>
+            </div>
+
+            <div class="space-y-1">
+              <label for="accessToken" class="text-[11px] font-medium text-slate-700">Access Token (Permanente)</label>
+              <input id="accessToken" type="password" bind:value={settings.whatsapp.accessToken} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500" />
+            </div>
+
+            <div class="space-y-1">
+              <label for="verifyToken" class="text-[11px] font-medium text-slate-700">Verify Token</label>
+              <input id="verifyToken" bind:value={settings.whatsapp.verifyToken} class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-indigo-500" />
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <h2 class="text-sm font-semibold text-slate-900 border-b border-slate-100 pb-2">Teléfonos y Alertas</h2>
+            
+            <div class="space-y-1">
+              <label for="chatbotNumber" class="text-[11px] font-medium text-indigo-700">Número del Chatbot (Público)</label>
+              <input 
+                id="chatbotNumber" 
+                bind:value={settings.whatsapp.chatbotNumber} 
+                class="w-full rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500" 
+                placeholder="56912345678" 
+              />
+              <p class="text-[9px] text-slate-400">Este es el número que ven tus clientes. Se usará para generar enlaces.</p>
+            </div>
+
+            <div class="my-2 border-t border-slate-100"></div>
+
+            <div class="space-y-1">
+              <label for="notificationPhones" class="text-[11px] font-medium text-slate-700">Teléfonos Administrativos (Reciben Alertas)</label>
+              <textarea 
+                id="notificationPhones" 
+                rows="4" 
+                bind:value={settings.whatsapp.notificationPhones} 
+                placeholder="56911111111, 56922222222" 
+                class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 font-mono"
+              ></textarea>
+              <p class="text-[9px] text-slate-400">
+                Escribe los números (separados por coma) del staff que recibirá avisos de <b>pedidos confirmados</b> y <b>solicitudes de humano</b>.
+              </p>
+            </div>
           </div>
         </div>
       {/if}

@@ -23,6 +23,7 @@ export type Settings = {
     phoneNumberId: string;
     accessToken: string;
     verifyToken: string;
+    chatbotNumber: string;
     notificationPhones: string;
   };
   hours: {
@@ -49,12 +50,7 @@ export type Settings = {
   // 👇 NUEVO: Estructura de Flujo Complejo
   flow: {
     active: boolean; // Interruptor general
-    nodes: {
-      welcome: FlowNode;
-      node_1: FlowNode;
-      node_2: FlowNode;
-      node_3: FlowNode;
-    };
+    nodes: any;
   };
 };
 
@@ -66,6 +62,7 @@ export const defaultSettings: Settings = {
     phoneNumberId: '',
     accessToken: '',
     verifyToken: '',
+    chatbotNumber: '',
     notificationPhones: ''
   },
   hours: {
@@ -75,7 +72,7 @@ export const defaultSettings: Settings = {
     sunday: 'Según disponibilidad, consultar por WhatsApp.'
   },
   messages: {
-    welcome: '¡Hola! 👋 Soy Edu.',
+    welcome: '¡Hola! 👋 Soy el asistente virtual.',
     inactivity: 'Sigo por aquí 😊.',
     handoff: 'Derivaré tu consulta a una persona. 👤',
     closing: 'Gracias por escribirnos. 👋'
@@ -97,32 +94,32 @@ export const defaultSettings: Settings = {
         id: 'welcome',
         text: '¡Hola! 👋 Bienvenido a Delicias Porteñas. Por favor elige una opción:',
         options: [
-          { id: 'btn_w1', label: '1. Ver Catálogo 🎂', action: 'template', target: 'node_1' },
-          { id: 'btn_w2', label: '2. Hacer Pedido 📝', action: 'template', target: 'node_2' },
-          { id: 'btn_w3', label: '3. Info y Horarios 📍', action: 'template', target: 'node_3' }
+          { id: 'btn_w1', label: '1. Ver Catálogo y Hacer Pedido🎂', action: 'template', target: 'node_1' },
+          { id: 'btn_w2', label: '2. Horarios y Sucursales📍', action: 'template', target: 'node_2' },
+          { id: 'btn_w3', label: '3. Atención al Cliente 📝 ', action: 'template', target: 'node_3' }
         ]
       },
       node_1: {
         id: 'node_1',
-        text: '🎂 Tenemos maravillosas tortas caseras. ¿Qué te gustaría hacer?',
+        text: '1. Ver Catálogo y Hacer Pedido🎂',
         options: [
-          { id: 'btn_n1_1', label: '1. Ver en la Web 🌐', action: 'link', target: 'https://deliciasportenas.cl' },
+          { id: 'btn_n1_1', label: '1. Ver en la Web 🌐', action: 'link', target: 'https://deliciasportenas.cl/latiendita' },
           { id: 'btn_n1_2', label: '2. Volver al Menú ↩️', action: 'back' }
         ]
       },
       node_2: {
         id: 'node_2',
-        text: '📝 Para tomar tu pedido necesito algunos datos. ¿Empezamos o prefieres ver la web?',
+        text: '2. Horarios y Sucursales📍',
         options: [
-          { id: 'btn_n2_1', label: '1. Empezar aquí (Chat) 💬', action: 'none' }, // 'none' dejará que el usuario escriba y el motor detecte 'order_start'
+          { id: 'btn_n2_1', label: '1. Ir a la "Tiendita Porteña" 🌐', action: 'link', target: 'https://deliciasportenas.cl/latiendita' },
           { id: 'btn_n2_2', label: '2. Volver al inicio ↩️', action: 'back' }
         ]
       },
       node_3: {
         id: 'node_3',
-        text: '📍 Estamos en Santiago Centro.\n🕒 Horario: Lun-Vie 10-19hrs.',
+        text: '3. Atención al Cliente 📝 ',
         options: [
-          { id: 'btn_n3_1', label: '1. Ver Mapa 🗺️', action: 'link', target: 'https://maps.google.com' },
+          { id: 'btn_n3_1', label: '1. Contactar con atención al cliente👤', action: 'link', target: 'https://wa.me/56931069911' },
           { id: 'btn_n3_2', label: '2. Volver ↩️', action: 'back' }
         ]
       }
