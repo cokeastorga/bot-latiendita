@@ -1,18 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { db, storage } from '$lib/firebase';
+  import { db } from '$lib/firebase'; // 👈 Ya no necesitamos 'storage' ni imports de firebase/storage
   import { doc, getDoc, setDoc } from 'firebase/firestore';
-  import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
   import { defaultSettings, type Settings } from '$lib/settings';
 
   let settings: Settings = structuredClone(defaultSettings);
   let loading = true;
   let saving = false;
   
-  // Mejora de UX: Estados específicos por nodo
   let uploadingNodeId: string | null = null; 
   let uploadSuccessId: string | null = null;
-
   let error: string | null = null;
   let success = false;
 
@@ -70,38 +67,46 @@
     }
   }
 
+  // 👇 NUEVA LÓGICA: BASE64 EN VEZ DE STORAGE
   async function handleImageUpload(e: Event, nodeId: string) {
     const target = e.target as HTMLInputElement;
     if (!target.files || target.files.length === 0) return;
 
     const file = target.files[0];
-    
-    // Activar estado de carga para este nodo específico
     uploadingNodeId = nodeId;
     uploadSuccessId = null;
 
     try {
+      // 1. Redimensionar (Mantenerla ligera para la BD)
       const resizedBlob = await resizeImage(file, 250, 250);
-      const storageRef = ref(storage, `bot_assets/${nodeId}_image_${Date.now()}.jpg`);
       
-      await uploadBytes(storageRef, resizedBlob);
-      const url = await getDownloadURL(storageRef);
+      // 2. Convertir a Base64
+      const base64 = await blobToBase64(resizedBlob);
 
+      // 3. Generar URL local (puente)
+      // Usamos window.location.origin para saber tu dominio actual (localhost o vercel)
+      const publicUrl = `${window.location.origin}/api/image/${nodeId}`;
+
+      // 4. Guardar en settings
       // @ts-ignore
       if(settings.flow.nodes[nodeId]) {
          // @ts-ignore
-         settings.flow.nodes[nodeId].mediaUrl = url;
+         settings.flow.nodes[nodeId].mediaBase64 = base64; // Guardamos la data real
+         // @ts-ignore
+         settings.flow.nodes[nodeId].mediaUrl = publicUrl; // Guardamos el link para WhatsApp
       }
 
-      // Éxito: Mostrar check verde temporalmente
+      // Guardado automático al subir imagen para persistir en BD inmediatamente
+      await setDoc(docRef, settings, { merge: true });
+
       uploadSuccessId = nodeId;
-      setTimeout(() => { uploadSuccessId = null; }, 3000); // Quitar mensaje de éxito tras 3 seg
+      setTimeout(() => { uploadSuccessId = null; }, 3000);
 
     } catch (err) {
-      console.error('Error subiendo imagen:', err);
+      console.error('Error procesando imagen:', err);
       alert('Error al procesar la imagen');
     } finally {
-      uploadingNodeId = null; // Apagar spinner
+      uploadingNodeId = null;
     }
   }
 
@@ -118,10 +123,19 @@
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
           else reject('Canvas blob error');
-        }, 'image/jpeg', 0.9);
+        }, 'image/jpeg', 0.85); // Calidad 85% para ahorrar espacio
       };
       img.onerror = reject;
       img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
   }
 
@@ -207,12 +221,11 @@
                 <div class="p-4 space-y-4">
                   {#if key === 'welcome'}
                     <div class="space-y-2 pb-2 border-b border-slate-100">
-                      <span class="text-[10px] font-medium text-slate-500">Imagen de Cabecera (Se redimensiona a 250x250)</span>
+                      <span class="text-[10px] font-medium text-slate-500">Imagen de Cabecera (Se guarda en BD)</span>
                       <div class="flex items-center gap-3">
-                        {#if node.mediaUrl}
+                        {#if node.mediaBase64}
                           <div class="relative group">
-                            <img src={node.mediaUrl} alt="Header" class="w-12 h-12 rounded object-cover border border-slate-200" />
-                            <div class="absolute inset-0 bg-black/10 rounded group-hover:bg-black/20 transition"></div>
+                            <img src={node.mediaBase64} alt="Header" class="w-12 h-12 rounded object-cover border border-slate-200" />
                           </div>
                         {/if}
                         
@@ -230,15 +243,18 @@
                               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span>Subiendo...</span>
+                            <span>Procesando...</span>
                           {:else if uploadSuccessId === key}
-                            <span>✅ ¡Listo!</span>
+                            <span>✅ Guardada</span>
                           {:else}
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            <span>{node.mediaUrl ? 'Cambiar Imagen' : 'Subir Imagen'}</span>
+                            <span>{node.mediaBase64 ? 'Cambiar Imagen' : 'Subir Imagen'}</span>
                           {/if}
                         </label>
                       </div>
+                      {#if node.mediaUrl}
+                        <p class="text-[9px] text-slate-400 font-mono mt-1 truncate">Link público: {node.mediaUrl}</p>
+                      {/if}
                     </div>
                   {/if}
 

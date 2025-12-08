@@ -13,6 +13,7 @@ export type FlowNode = {
   id: string;
   text: string;        // Mensaje principal del bot
   mediaUrl?: string;
+  mediaBase64?: string;
   options: FlowOption[];
 };
 
