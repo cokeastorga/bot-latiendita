@@ -25,12 +25,12 @@
       href: '/usuarios',
       icon: 'users'
     },
-    {
+    /*{
       label: 'Integración WhatsApp',
       href: '/integraciones',
       icon: 'whatsapp'
     },
-    {
+    */{
       label: 'Configuración',
       href: '/configuracion',
       icon: 'settings'

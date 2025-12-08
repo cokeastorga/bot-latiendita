@@ -193,7 +193,7 @@ export async function buildReply(intent: IntentMatch, ctx: BotContext): Promise<
         const draft: OrderDraft = { producto: producto.nombre };
         return await buildProductOrderResponse(producto, draft, ctx, intent, lineBreak, aiReply);
       }
-      reply = aiReply || `No estoy seguro. Prueba "Ver menú".`;
+      reply = aiReply || `No estoy seguro. Prueba "Hola".`;
       nextState = 'idle';
       break;
     }
