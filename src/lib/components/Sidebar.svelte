@@ -144,7 +144,7 @@
         Online
       </span>
       <span class="text-slate-500">
-        v0.1.0
+        v0.1.1
       </span>
     </div>
 
