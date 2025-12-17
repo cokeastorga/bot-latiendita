@@ -14,6 +14,8 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  addDoc,
+  collection,
   serverTimestamp
 } from 'firebase/firestore';
 
@@ -29,6 +31,7 @@ type ConversationDoc = {
   lastMessageAt?: any;
 };
 
+// Verificación del Webhook para Meta
 export const GET: RequestHandler = async ({ url }) => {
   const mode = url.searchParams.get('hub.mode');
   const token = url.searchParams.get('hub.verify_token');
@@ -73,7 +76,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     if (!text.trim()) return json({ ok: true, ignored: 'Empty text' });
 
-    // 1. Gestión Conversación
+    // 1. GESTIÓN DE CONVERSACIÓN
     const channel: Channel = 'whatsapp';
     const conversationId = `wa:${fromPhone}`;
     const convRef = doc(db, 'conversations', conversationId);
@@ -90,7 +93,7 @@ export const POST: RequestHandler = async ({ request }) => {
       convData = (convSnap.data() as ConversationDoc) || {};
     }
 
-    // 2. Timeout
+    // 2. LÓGICA DE TIMEOUT (5 MINUTOS)
     const TIMEOUT_MS = 5 * 60 * 1000;
     const now = Date.now();
     const lastMsgTime = convData.lastMessageAt?.toMillis ? convData.lastMessageAt.toMillis() : now;
@@ -102,7 +105,7 @@ export const POST: RequestHandler = async ({ request }) => {
       previousMetadata = { ...previousMetadata, orderDraft: null, aiSlots: null };
     }
 
-    // 3. Motor
+    // 3. MOTOR DEL CHATBOT
     const history = (convData.history ?? []).slice(-40);
     const ctx: BotContext = {
       conversationId, userId: fromPhone, channel, text, locale: 'es',
@@ -111,13 +114,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const botResponse = await processMessage(ctx);
 
-    // 4. Guardar
-    const newHistory: HistoryItem[] = [
-      ...history,
-      { from: 'user', text, ts: Date.now() },
-      { from: 'bot', text: botResponse.reply, ts: Date.now() }
-    ].slice(-40);
-
+    // 4. ACTUALIZACIÓN DEL DOCUMENTO PRINCIPAL
     const newMetadata = { ...previousMetadata, ...(botResponse.meta ?? {}) };
     let nextStateToSave = botResponse.nextState ?? previousState ?? null;
 
@@ -128,15 +125,36 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     await updateDoc(convRef, {
-      state: nextStateToSave, metadata: newMetadata, history: newHistory,
-      updatedAt: serverTimestamp(), lastMessageAt: serverTimestamp(), lastMessageText: text,
+      state: nextStateToSave,
+      metadata: newMetadata,
+      updatedAt: serverTimestamp(),
+      lastMessageAt: serverTimestamp(),
+      lastMessageText: text,
       needsHuman: botResponse.needsHuman ?? false,
       status: botResponse.needsHuman ? 'pending' : 'open'
     });
 
-    if (botResponse.needsHuman && whatsappCfg.notificationPhones) { /* ... */ }
+    // 5. REGISTRO EN SUBCOLECCIÓN "MESSAGES" (Para tiempo real en el Panel)
+    const messagesSubRef = collection(db, 'conversations', conversationId, 'messages');
 
-    // 6. ENVIAR A WHATSAPP (Estrategia Segura)
+    // Guardar el mensaje del usuario
+    await addDoc(messagesSubRef, {
+      from: 'user',
+      direction: 'in',
+      text: text,
+      createdAt: serverTimestamp()
+    });
+
+    // Guardar la respuesta del bot
+    await addDoc(messagesSubRef, {
+      from: 'bot',
+      direction: 'out',
+      text: botResponse.reply,
+      intentId: botResponse.intentId || null,
+      createdAt: serverTimestamp()
+    });
+
+    // 6. ENVIAR RESPUESTA A WHATSAPP
     if (whatsappCfg.accessToken && whatsappCfg.phoneNumberId) {
       const url = `https://graph.facebook.com/v21.0/${whatsappCfg.phoneNumberId}/messages`;
       const headers = {
@@ -144,8 +162,7 @@ export const POST: RequestHandler = async ({ request }) => {
         Authorization: `Bearer ${whatsappCfg.accessToken}`
       };
 
-      // PASO 1: Intentar enviar imagen (Si existe)
-      // En un bloque try/catch PROPIO para que si falla, no detenga el resto.
+      // Enviar imagen si existe
       if (botResponse.media && botResponse.media.length > 0) {
         try {
           for (const m of botResponse.media) {
@@ -157,20 +174,19 @@ export const POST: RequestHandler = async ({ request }) => {
                   messaging_product: 'whatsapp',
                   to: fromPhone,
                   type: 'image',
-                  image: { link: m.url, caption: '' } // Enviamos imagen sola primero
+                  image: { link: m.url, caption: '' }
                 })
               });
             }
           }
         } catch (imgErr) {
-          console.error('⚠️ Error enviando imagen (se continuará con texto):', imgErr);
+          console.error('⚠️ Error enviando imagen:', imgErr);
         }
       }
 
-      // PASO 2: Enviar Mensaje Principal (Texto o Botones)
+      // Enviar texto o interactivo
       try {
         let payload: any = { messaging_product: 'whatsapp', to: fromPhone };
-
         if (botResponse.interactive) {
           payload.type = 'interactive';
           payload.interactive = botResponse.interactive;
@@ -178,18 +194,16 @@ export const POST: RequestHandler = async ({ request }) => {
           payload.type = 'text';
           payload.text = { body: botResponse.reply };
         }
-
         await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-
       } catch (e) {
-        console.error('❌ Error crítico enviando mensaje:', e);
+        console.error('❌ Error enviando mensaje:', e);
       }
     }
 
     return json({ ok: true });
 
   } catch (err) {
-    console.error('❌ Error webhook:', err);
+    console.error('❌ Error crítico en Webhook:', err);
     return json({ ok: false, error: 'internal_error' }, { status: 500 });
   }
 };

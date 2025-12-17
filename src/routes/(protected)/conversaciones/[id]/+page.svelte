@@ -78,78 +78,71 @@
 
   $: convId = $page.params.id;
 
-  onMount(() => {
+onMount(() => {
     if (!convId) return;
 
+    let unsubscribeConv: (() => void);
+    let unsubscribeMessages: (() => void);
+
     const convRef = doc(db, 'conversations', convId);
-    let unsubscribeMessages: (() => void) | null = null;
 
-    (async () => {
-      try {
-        const convSnap = await getDoc(convRef);
-
-        if (!convSnap.exists()) {
-          loadingConv = false;
-          goto('/conversaciones');
-          return;
-        }
-
-        const data = convSnap.data();
-        const meta = (data.metadata ?? {}) as Record<string, unknown>;
-
-        conversation = {
-          id: convSnap.id,
-          channel: (data.channel ?? 'whatsapp') as 'whatsapp' | 'web',
-          userId: data.userId ?? null,
-          customerName: (meta.customerName as string) ?? null,
-          status: (data.status ?? 'open') as ConversationStatus,
-          lastMessageAt: data.lastMessageAt?.toDate ? data.lastMessageAt.toDate() : null,
-          lastIntentId: data.lastIntentId ?? null,
-          needsHuman: data.needsHuman ?? false
-        };
+    // 1. LISTENER DEL DOCUMENTO PRINCIPAL (Status, NeedsHuman, Metadata)
+    unsubscribeConv = onSnapshot(convRef, (docSnap) => {
+      if (!docSnap.exists()) {
+        console.warn('⚠️ La conversación no existe en Firestore');
         loadingConv = false;
-
-        // Escuchar mensajes
-        const messagesRef = collection(convRef, 'messages');
-        const qMessages = query(messagesRef, orderBy('createdAt', 'asc'));
-
-        unsubscribeMessages = onSnapshot(
-          qMessages,
-          (snapshot: QuerySnapshot<DocumentData>) => {
-            const items: Message[] = snapshot.docs.map((docSnap) => {
-              const d = docSnap.data();
-              return {
-                id: docSnap.id,
-                from: (d.from ?? (d.direction === 'out' ? 'bot' : 'user')) as
-                  | 'user'
-                  | 'bot'
-                  | 'staff',
-                direction: (d.direction ?? 'in') as 'in' | 'out',
-                text: d.text ?? '',
-                intentId: d.intentId ?? null,
-                confidence: d.confidence ?? null,
-                stateBefore: d.stateBefore ?? null,
-                stateAfter: d.stateAfter ?? null,
-                createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : null
-              };
-            });
-
-            messages = items;
-            loadingMessages = false;
-          },
-          (error) => {
-            console.error('Error escuchando mensajes:', error);
-            loadingMessages = false;
-          }
-        );
-      } catch (err) {
-        console.error('Error cargando conversación:', err);
-        loadingConv = false;
-        loadingMessages = false;
+        goto('/conversaciones');
+        return;
       }
-    })();
 
+      const data = docSnap.data();
+      const meta = (data.metadata ?? {}) as Record<string, unknown>;
+
+      // Sincronización reactiva de la cabecera y estados
+      conversation = {
+        id: docSnap.id,
+        channel: (data.channel ?? 'whatsapp') as 'whatsapp' | 'web',
+        userId: data.userId ?? null,
+        customerName: (meta.customerName as string) ?? null,
+        status: (data.status ?? 'open') as ConversationStatus,
+        lastMessageAt: data.lastMessageAt?.toDate ? data.lastMessageAt.toDate() : null,
+        lastIntentId: data.lastIntentId ?? null,
+        needsHuman: data.needsHuman ?? false
+      };
+      loadingConv = false;
+    }, (error) => {
+      console.error('❌ Error en el listener de conversación:', error);
+      loadingConv = false;
+    });
+
+    // 2. LISTENER DE LA SUBCOLECCIÓN DE MENSAJES (Historial en tiempo real)
+    const messagesRef = collection(convRef, 'messages');
+    const qMessages = query(messagesRef, orderBy('createdAt', 'asc'));
+
+    unsubscribeMessages = onSnapshot(qMessages, (snapshot) => {
+      messages = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          from: (d.from ?? (d.direction === 'out' ? 'bot' : 'user')) as 'user' | 'bot' | 'staff',
+          direction: (d.direction ?? 'in') as 'in' | 'out',
+          text: d.text ?? '',
+          intentId: d.intentId ?? null,
+          confidence: d.confidence ?? null,
+          stateBefore: d.stateBefore ?? null,
+          stateAfter: d.stateAfter ?? null,
+          createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : null
+        };
+      });
+      loadingMessages = false;
+    }, (error) => {
+      console.error('❌ Error en el listener de mensajes:', error);
+      loadingMessages = false;
+    });
+
+    // LIMPIEZA DE MEMORIA AL DESMONTAR EL COMPONENTE
     return () => {
+      if (unsubscribeConv) unsubscribeConv();
       if (unsubscribeMessages) unsubscribeMessages();
     };
   });
