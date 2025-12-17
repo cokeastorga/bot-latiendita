@@ -7,6 +7,9 @@
 	"/api/conversations/status": [
 		"src/routes/api/conversations/status/+server.ts"
 	],
+	"/api/image/[key]": [
+		"src/routes/api/image/[key]/+server.ts"
+	],
 	"/api/manual-reply": [
 		"src/routes/api/manual-reply/+server.ts"
 	],
