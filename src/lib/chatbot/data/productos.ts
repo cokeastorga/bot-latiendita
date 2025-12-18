@@ -1,12 +1,10 @@
-// src/lib/chatbot/data/productos.ts
-
 export type Producto = {
   id: string;
   slug: string;
   nombre: string;
   descripcionCorta: string;
   descripcion: string;
-  categoria: 'Bizcocho' | 'Hojarasca' | 'Porciones' | 'Temporada';
+  categoria: 'Bizcocho' | 'Hojarasca' | 'Porciones'  | 'Kuchenes' | 'Cheese Cake' | 'Galletas' | 'Pan Tradicional o Especial' | 'Empanadas' | 'Facturas' | 'Pre Pizzas' | 'Pie y Tartas'| 'Alfajores';
   precio: number;              // precio base si no hay tamaños
   rindePersonas?: number;
   diametroCm?: number;
@@ -357,7 +355,7 @@ export const productos: Producto[] = [
     precio: 20500,
     rindePersonas: 15,
     diametroCm: 20,
-    imagen: 'tortas/hojarasca/tortaAmor2.webp',
+    imagen: 'tortas/hojarasca/tortaAmor2.png',
     disponible: true,
      tamanos: [
       { id: 'ch', nombre: 'Chico (Ø 20 cm / 10-15p)', precio: 20500 },
@@ -404,13 +402,630 @@ export const productos: Producto[] = [
     imagen: 'tortas/hojarasca/tortaMilHojas2.webp',
     disponible: true,
      tamanos: [
-      { id: 'ch', nombre: 'Chico (Ø 20 cm / 10-15p)', precio: 18500 },
-      { id: 'md', nombre: 'Mediano (Ø 22 cm / 20–25p)', precio: 27500 },
-      { id: 'gr', nombre: 'Grande (Ø 24 cm / 25-30p)', precio: 32500 }
+      { id: 'ch', nombre: 'Chico (Ø 20 cm / 10-15p)', precio: 20500 },
+      { id: 'md', nombre: 'Mediano (Ø 22 cm / 20–25p)', precio: 29500 },
+      { id: 'gr', nombre: 'Grande (Ø 24 cm / 25-30p)', precio: 34500 }
     ],
     addons: [
       { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
       { id: 'velas', nombre: 'Velas', precio: 1000 }
     ]
+  },
+  {
+    id: 'k1',
+    slug: 'kuchen-nuez',
+    nombre: 'Kuchen de Nuez',
+    descripcionCorta: 'Clásico del sur con nueces seleccionadas y leche condensada.',
+    descripcion: 'Masa murbe suave y crujiente, rellena con una generosa mezcla de nueces, caramelo y leche condensada. Una tradición sureña imperdible.',
+    categoria: 'Kuchenes', 
+    precio: 16500,
+    rindePersonas: 10,
+    diametroCm: 22,
+    imagen: 'latienda/kuchenes/foto (46).webp', 
+    disponible: true,
+    tamanos: [
+        { id: 'entero', nombre: 'Entero (Ø 22 cm)', precio: 12000 }
+    ],
+    addons: [
+      { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
+      { id: 'velas', nombre: 'Velas', precio: 1000 }
+    ]
+  },
+  {
+    id: 'k2',
+    slug: 'kuchen-manzana',
+    nombre: 'Kuchen de Manazana',
+    descripcionCorta: 'Clásico del sur con nueces seleccionadas y leche condensada.',
+    descripcion: 'Masa murbe suave y crujiente, rellena con una generosa mezcla de nueces, caramelo y leche condensada. Una tradición sureña imperdible.',
+    categoria: 'Kuchenes', 
+    precio: 16500,
+    rindePersonas: 10,
+    diametroCm: 22,
+    imagen: 'latienda/kuchenes/foto (39).webp', 
+    disponible: true,
+    tamanos: [
+        { id: 'entero', nombre: 'Entero (Ø 22 cm)', precio: 14000 }
+    ],
+    addons: [
+      { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
+      { id: 'velas', nombre: 'Velas', precio: 1000 }
+    ]
+  },
+  {
+    id: 'k3',
+    slug: 'kuchen-sureño',
+    nombre: 'Kuchen de Mix de berries y fruto secos',
+    descripcionCorta: 'Clásico del sur con nueces seleccionadas y Mix de Berries.',
+    descripcion: 'Masa murbe suave y crujiente, rellena con una generosa mezcla de nueces, mermelada de frambueza y arandanos frescos. Una tradición sureña imperdible.',
+    categoria: 'Kuchenes', 
+    precio: 16500,
+    rindePersonas: 10,
+    diametroCm: 22,
+    imagen: 'latienda/kuchenes/foto (36).webp', 
+    disponible: true,
+    tamanos: [
+        { id: 'entero', nombre: 'Entero (Ø 22 cm)', precio: 12000 }
+    ],
+    addons: [
+      { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
+      { id: 'velas', nombre: 'Velas', precio: 1000 }
+    ]
+  },
+  {
+    id: 'k4',
+    slug: 'kuchen-miga',
+    nombre: 'Kuchen de Miga',
+    descripcionCorta: 'Clásico del sur con .',
+    descripcion: 'Masa murbe suave y crujiente, rellena con una generosa mezcla de nueces, mermelada de frambueza y arandanos frescos. Una tradición sureña imperdible.',
+    categoria: 'Kuchenes', 
+    precio: 12000,
+    rindePersonas: 10,
+    diametroCm: 22,
+    imagen: 'latienda/kuchenes/IMG_0101.webp', 
+    disponible: true,
+    tamanos: [
+        { id: 'entero', nombre: 'Entero (Ø 22 cm)', precio: 12000 }
+    ],
+    addons: [
+      { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
+      { id: 'velas', nombre: 'Velas', precio: 1000 }
+    ]
+  },
+ // --- NUEVA SECCIÓN: Facturas ---
+ 
+  {
+    id: 'e1',
+    slug: 'empanada-napolitana',
+    nombre: 'Empanada Napolitana',
+    descripcionCorta: 'Queso derretido, jamón, tomate y orégano.',
+    descripcion: 'Nuestra masa casera rellena con abundante queso, jamón pierna, tomate fresco picado y un toque de orégano. Horneada a la perfección.',
+    categoria: 'Empanadas', 
+    precio: 2500, 
+    rindePersonas: 1,
+    imagen: 'latienda/emp/IMG_0089.webp', 
+    disponible: true,
+    
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2500 }
+    ]
+  },
+  {
+    id: 'e2',
+    slug: 'empanada-queso',
+    nombre: 'Empanada de Queso, Champiñon Choclo',
+    descripcionCorta: 'Masa crujiente y mucho queso mantecoso, champiñon y choclo.',
+    descripcion: 'La favorita de siempre. Masa dorada y crujiente rellena con una generosa porción de queso mantecoso que se estira al morder con champiñones frescos y choclo.',
+    categoria: 'Empanadas',
+    precio: 2500,
+    rindePersonas: 1,
+    imagen: 'latienda/emp/IMG_0087.webp', // Imagen del banner de queso
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2500 }
+    ]
+  },
+  {
+    id: 'e4',
+    slug: 'empanada-pino',
+    nombre: 'Empanada de Carne picada',
+    descripcionCorta: 'Carne picada, cebolla, huevo y aceituna.',
+    descripcion: 'El sabor tradicional chileno. Pino jugoso de carne picada, cebolla suave, huevo duro, pasas y aceituna en nuestra masa horneada.',
+    categoria: 'Empanadas',
+    precio: 2500,
+    rindePersonas: 1,
+    imagen: 'latienda/emp/IMG_0088.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2500 }
+    ]
+  },
+   {
+    id: 'f1',
+    slug: 'factura1',
+    nombre: 'Factura trenza',
+    descripcionCorta: 'Factura con pastelera y mermelada.',
+    descripcion: 'El sabor tradicional Argentino. Nuestra masa de manteca horneada acompañada de crema pastelera y un toque de mermelada.',
+    categoria: 'Facturas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/factura24.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 900 }
+    ]
+  },
+   {
+    id: 'f2',
+    slug: 'factura2',
+    nombre: 'Factura palmera',
+    descripcionCorta: 'Tradicional palmera chilena en una version porteña.',
+    descripcion: 'El sabor tradicional chileno. En nuestra masa horneada.',
+    categoria: 'Facturas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/IMG_0095.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 900 }
+    ]
+  },
+   {
+    id: 'f3',
+    slug: 'factura3',
+    nombre: 'Factura torcida',
+    descripcionCorta: 'Tradicional masa porteña con crema pastelera.',
+    descripcion: 'El sabor tradicional porteño. Crema pastelera y nuestra masa horneada.',
+    categoria: 'Facturas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/IMG_0110.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 900 }
+    ]
+  },
+   {
+    id: 'f4',
+    slug: 'factura4',
+    nombre: 'Factura de berlín',
+    descripcionCorta: 'Como una berlin pero de masa de factura.',
+    descripcion: 'El sabor tradicional de un berlín. crema pastelera o dulce de lecje y nuestra masa horneada.',
+    categoria: 'Facturas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/IMG_0111.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 900 }
+    ]
+  },
+   {
+    id: 'f5',
+    slug: 'factura5',
+    nombre: 'Factura Dona',
+    descripcionCorta: 'Crujiente masa porteña con crema pastelera y un toque de mermelada.',
+    descripcion: 'El sabor tradicional porteño. crema pastelera en nuestra masa horneada.',
+    categoria: 'Facturas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/IMG_0112.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 900 }
+    ]
+  },
+   {
+    id: 'f6',
+    slug: 'factura6',
+    nombre: 'Factura Buñuelo',
+    descripcionCorta: 'La favorita; delicado rol de masa porteña rellena de crema pastelera.',
+    descripcion: 'El sabor tradicional francés. pero en nuestra masa horneada rellena de crema pastelera.',
+    categoria: 'Facturas',
+    precio: 1200,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/IMG_0110.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 1200 }
+    ]
+  },
+   {
+    id: 'f7',
+    slug: 'factura7',
+    nombre: 'Factura Media Luna',
+    descripcionCorta: 'La clasica factura porteña.',
+    descripcion: 'El sabor tradicional porteño. una medialuna en nuestra masa horneada.',
+    categoria: 'Facturas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/facturas/IMG_0128.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 900 }
+    ]
+  },
+   {
+    id: 'p1',
+    slug: 'porcion1',
+    nombre: 'Porcion de Cheese Cake de Frutos Rojos ',
+    descripcionCorta: 'Trozo de Cheese Cake de Frutos rojos.',
+    descripcion: 'Delicado Cheese cake tradicional acompañado de frutos rojos de la zona.',
+    categoria: 'Porciones',
+    precio: 3500,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0103.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 3500 }
+    ]
+  },
+   {
+    id: 'p2',
+    slug: 'porcion2',
+    nombre: 'Porcion de Kuchen de Frambuesa ',
+    descripcionCorta: 'Un clasico kuchen de frambuesa',
+    descripcion: 'El sabor tradicional de un kuchen en su version frambuesa',
+    categoria: 'Porciones',
+    precio: 1500,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0104.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 1500 }
+    ]
+  },
+   {
+    id: 'p3',
+    slug: 'porcion3',
+    nombre: 'Porcion de Torta de Yoghurt ',
+    descripcionCorta: 'Delicada torta de Yoghurt.',
+    descripcion: 'Una torta fresca de yoghurt de frambuesa.',
+    categoria: 'Porciones',
+    precio: 2000,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0105.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2000 }
+    ]
+  },
+   {
+    id: 'p4',
+    slug: 'porcion4',
+    nombre: 'Porcion de Kuchen de durazno ',
+    descripcionCorta: 'Clasico Kuchen de Durazno.',
+    descripcion: 'El sabor tradicional del kuchen en su version Durazno.',
+    categoria: 'Porciones',
+    precio: 1500,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0106.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 1500 }
+    ]
+  },
+   {
+    id: 'p5',
+    slug: 'porcion5',
+    nombre: 'Porcion de 3 Trufas ',
+    descripcionCorta: 'Las clasicas Trufas.',
+    descripcion: 'El sabor tradicional de una trufa de chocolate con un toque de licor.',
+    categoria: 'Porciones',
+    precio: 2000,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0107.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2000 }
+    ]
+  },
+   {
+    id: 'p6',
+    slug: 'porcion6',
+    nombre: 'Porcion de Kuchen de Nuez ',
+    descripcionCorta: 'Kuchen de nuez y crema.',
+    descripcion: 'El sabor tradicional del kuchen en su version nuez y crema.',
+    categoria: 'Porciones',
+    precio: 1500,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0108.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 1500 }
+    ]
+  },
+   {
+    id: 'p7',
+    slug: 'porcion7',
+    nombre: 'Porcion de Galletas de Navidad 1/4   ',
+    descripcionCorta: 'Mix de Galletas.',
+    descripcion: 'Nuestra masa horneada de galletas, una delicia!.',
+    categoria: 'Porciones',
+    precio: 4000,
+    rindePersonas: 1,
+    imagen: 'latienda/porciones/IMG_0092.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 4000 }
+    ]
+  }, 
+   {
+    id: 'pr1',
+    slug: 'pre1',
+    nombre: 'Pre Pizza ',
+    descripcionCorta: 'Masa de Pizza tradicional.',
+    descripcion: 'Masa de Pizza tradicional porteña.',
+    categoria: 'Pre Pizzas',
+    precio: 2500,
+    rindePersonas: 1,
+    imagen: 'latienda/prePizzas/prePizza.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2500 }
+    ]
+  },
+   {
+    id: 'pr2',
+    slug: 'pre2',
+    nombre: 'Pre Pizza tradicional Cebolla ',
+    descripcionCorta: 'Masa de pizza con cebolla.',
+    descripcion: 'Masa de pizza tradicional y cebolla.',
+    categoria: 'Pre Pizzas',
+    precio: 2500,
+    rindePersonas: 1,
+    imagen: 'latienda/prePizzas/prePizzaCebolla.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 2500 }
+    ]
+  },
+   {
+    id: 'tar1',
+    slug: 'tarta1',
+    nombre: 'Tarta de Frutillas ',
+    descripcionCorta: 'Tarta fresca de fruta Frutilla',
+    descripcion: 'Tarta de crema pastelera y Frutillas frescas',
+    categoria: 'Pie y Tartas',
+    precio: 900,
+    rindePersonas: 1,
+    imagen: 'latienda/tartas/tartaFrutilla.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 15000 }
+    ]
+  },
+   {
+    id: 'tar2',
+    slug: 'tarta2',
+    nombre: 'Tarta de Lima ',
+    descripcionCorta: 'Tarta de Lima.',
+    descripcion: 'Tradicional Pie de crema de Limón natural.',
+    categoria: 'Pie y Tartas',
+    precio: 15000,
+    rindePersonas: 1,
+    imagen: 'latienda/tartas/IMG_0099.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 15000 }
+    ]
+  },
+   {
+    id: 'tar3',
+    slug: 'tarta3',
+    nombre: 'Tarta Frola ',
+    descripcionCorta: 'Tarta de dulce de membrillo con coco  .',
+    descripcion: 'Tarta de dulce de membrillo con coco rallado.',
+    categoria: 'Pie y Tartas',
+    precio: 10000,
+    rindePersonas: 1,
+    imagen: 'latienda/tartas/IMG_0100.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'uni', nombre: 'Unidad', precio: 10000 }
+    ]
+  },
+  {
+    id: 'pn6',
+    slug: 'pan6',
+    nombre: 'Pan Marraqueta ',
+    descripcionCorta: 'Pan Tradicional.',
+    descripcion: 'Marraqueta fresca. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 2400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/IMG_0086.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1200 },
+        { id: '1kg', nombre: '1 Kilo', precio: 2400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 4800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 9600 }
+    ],
+  },
+   {
+    id: 'pn3',
+    slug: 'pan3',
+    nombre: 'Pan Hallulla ',
+    descripcionCorta: 'Pan Tradicional.',
+    descripcion: 'Hallulla fresca. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 2400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/IMG_0085.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1200 },
+        { id: '1kg', nombre: '1 Kilo', precio: 2400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 4800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 9600 }
+    ],
+  },
+   {
+    id: 'pn2',
+    slug: 'pan2',
+    nombre: 'Pan Dobladita ',
+    descripcionCorta: 'Pan Especial.',
+    descripcion: 'Dobladita fresca. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 3400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/especial/IMG_0084.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1700 },
+        { id: '1kg', nombre: '1 Kilo', precio: 3400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 6800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 13600 }
+    ],
+  },
+  {
+    id: 'pn4',
+    slug: 'pan4',
+    nombre: 'Pan Toscano ',
+    descripcionCorta: 'Pan Especial.',
+    descripcion: 'Toscano fresco; Pan con aceitunas. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 3400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/especial/IMG_0080.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1700 },
+        { id: '1kg', nombre: '1 Kilo', precio: 3400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 6800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 13600 }
+    ],
+  },
+  {
+    id: 'pn5',
+    slug: 'pan5',
+    nombre: 'Pan Colisa ',
+    descripcionCorta: 'Pan Especial.',
+    descripcion: 'Pan Colisa. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 3400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/especial/IMG_0079.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1700 },
+        { id: '1kg', nombre: '1 Kilo', precio: 3400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 6800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 13600 }
+    ],
+  },
+  {
+    id: 'pn1',
+    slug: 'pan1',
+    nombre: 'Pan Integral ',
+    descripcionCorta: 'Pan Especial.',
+    descripcion: 'Tortilla fresca integral. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 3400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/especial/IMG_0078.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1700 },
+        { id: '1kg', nombre: '1 Kilo', precio: 3400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 6800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 13600 }
+    ],
+  },
+  {
+    id: 'pn7',
+    slug: 'pan7',
+    nombre: 'Pan Ciabatta ',
+    descripcionCorta: 'Pan Especial.',
+    descripcion: 'Pan Ciabatta o pan italiano. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 3400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/especial/IMG_0082.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1700 },
+        { id: '1kg', nombre: '1 Kilo', precio: 3400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 6800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 13600 }
+    ],
+  },
+  {
+    id: 'pn8',
+    slug: 'pan8',
+    nombre: 'Pan Bocado de dama ',
+    descripcionCorta: 'Pan Especial.',
+    descripcion: 'Pan Bocado de dama. Precios por Kilo (aprox)',
+    categoria: 'Pan Tradicional o Especial',
+    precio: 3400,
+    rindePersonas: 4,
+    imagen: 'latienda/pan/especial/IMG_0083.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: '500g', nombre: '1/2 Kilo', precio: 1700 },
+        { id: '1kg', nombre: '1 Kilo', precio: 3400 },
+        { id: '2kg', nombre: 'Bolsa 2 Kilos', precio: 6800 },
+        { id: '4kg', nombre: 'Bolsa 4 Kilos', precio: 13600 }
+    ],
+  },
+  {
+    id: 'a1',
+    slug: 'alf1',
+    nombre: 'Alfajores Porteños',
+    descripcionCorta: 'Clasicos Alfajores porteños bañados de chocolate negro o blanco.',
+    descripcion: 'Clasicos Alfajores porteños bañados de chocolate negro o blanco',
+    categoria: 'Alfajores',
+    precio: 1500,
+    rindePersonas: 1,
+    imagen: 'latienda/alfajores/alfajores.webp', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'und', nombre: 'Pequeños', precio: 500 },
+        { id: 'und', nombre: 'Grandes', precio: 1500 }
+      
+    ],
+  },
+  {
+    id: 'ch1',
+    slug: 'che1',
+    nombre: 'Cheese Cake de Frutos rojos',
+    descripcionCorta: 'Cheese Cake de Frutos rojos.',
+    descripcion: 'Clasico Cheese Cake porteño acompañado de frutos rojos frescos',
+    categoria: 'Cheese Cake',
+    precio: 24000,
+    rindePersonas: 10,
+    imagen: 'latienda/cheese/chesseFrutos.jpg', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'und', nombre: 'Pequeño (Ø 20 cm / 10-15p)', precio: 24000 },
+              
+    ],
+     addons: [
+      { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
+      { id: 'velas', nombre: 'Velas', precio: 1000 }
+    ]
+  },
+   {
+    id: 'ch2',
+    slug: 'che2',
+    nombre: 'Cheese Cake Tradicional',
+    descripcionCorta: 'Cheese Cake.',
+    descripcion: 'Clasico Cheese Cake porteño',
+    categoria: 'Cheese Cake',
+    precio: 24000,
+    rindePersonas: 10,
+    imagen: 'latienda/cheese/chesseTradicional.png', // Imagen del banner de pino
+    disponible: true,
+    tamanos: [
+        { id: 'und', nombre: 'Pequeño (Ø 20 cm / 10-15p)', precio: 24000 },
+              
+    ],
+     addons: [
+      { id: 'card', nombre: 'Tarjeta de saludo', precio: 1500 },
+      { id: 'velas', nombre: 'Velas', precio: 1000 }
+    ]
   }
+
 ];
+
+
