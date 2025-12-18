@@ -16,7 +16,8 @@ import {
   updateDoc,
   addDoc,
   collection,
-  serverTimestamp
+  serverTimestamp,
+  query, where, orderBy, limit, getDocs
 } from 'firebase/firestore';
 
 type HistoryItem = { from: 'user' | 'bot'; text: string; ts: number; };
@@ -111,6 +112,54 @@ export const POST: RequestHandler = async ({ request }) => {
       conversationId, userId: fromPhone, channel, text, locale: 'es',
       previousState, metadata: { ...previousMetadata, history, settings }
     };
+
+    // -----------------------------------------------------------------------
+    // 🛑 LÓGICA DE PAUSA: Verificar si un humano atendió recientemente
+    // -----------------------------------------------------------------------
+    const PAUSE_DURATION_MS = 30 * 60 * 1000; // 30 Minutos de silencio
+    
+    // Buscamos el último mensaje enviado por el 'staff'
+    const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+    const qStaff = query(
+      messagesRef, 
+      where('from', '==', 'staff'), 
+      orderBy('createdAt', 'desc'), 
+      limit(1)
+    );
+    
+    const staffSnaps = await getDocs(qStaff);
+    
+    if (!staffSnaps.empty) {
+      const lastStaffMsg = staffSnaps.docs[0].data();
+      const lastStaffTime = lastStaffMsg.createdAt?.toMillis 
+        ? lastStaffMsg.createdAt.toMillis() 
+        : Date.now(); // Fallback por si no hay timestamp
+        
+      const timeSinceStaff = Date.now() - lastStaffTime;
+
+      if (timeSinceStaff < PAUSE_DURATION_MS) {
+        console.log(`[Webhook] ⏸️ Conversación pausada. Staff respondió hace ${Math.round(timeSinceStaff/60000)} min.`);
+        
+        // Guardamos el mensaje del usuario en el historial para que el staff lo vea en el panel,
+        // pero NO disparamos al bot.
+        await addDoc(messagesRef, {
+            from: 'user',
+            direction: 'in',
+            text: text,
+            createdAt: serverTimestamp(),
+            paused: true
+        });
+        
+        // Actualizamos para notificar al panel que hay un nuevo mensaje sin leer
+        await updateDoc(convRef, {
+            lastMessageAt: serverTimestamp(),
+            lastMessageText: text,
+            unreadCount: (convData.unreadCount || 0) + 1 // Importante para notificar al staff
+        });
+
+        return json({ ok: true, ignored: 'paused_by_human' });
+      }
+    }
 
     const botResponse = await processMessage(ctx);
 

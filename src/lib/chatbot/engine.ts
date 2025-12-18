@@ -99,7 +99,7 @@ export function detectIntent(text: string, previousState?: string | null): Inten
 
   if (has(['chao', 'adios', 'salir', 'terminar'])) return { id: 'goodbye', confidence: 0.99, reason: 'cierre' };
   if (has(['hola', 'buenas', 'inicio', 'buenos', 'buen'])) return { id: 'greeting', confidence: 0.9, reason: 'saludo' };
-  if (has(['pedido', 'comprar', 'torta'])) return { id: 'order_start', confidence: 0.9, reason: 'pedido' };
+  if (has(['pedido', 'comprar', 'torta', 'facturas'])) return { id: 'order_start', confidence: 0.9, reason: 'pedido' };
   
   return { id: 'fallback', confidence: 0.3, reason: 'fallback' };
 }
