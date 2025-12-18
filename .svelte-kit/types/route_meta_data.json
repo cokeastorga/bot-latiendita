@@ -19,6 +19,9 @@
 	"/api/whatsapp": [
 		"src/routes/api/whatsapp/+server.ts"
 	],
+	"/api/whatsapp/profile": [
+		"src/routes/api/whatsapp/profile/+server.ts"
+	],
 	"/(protected)/configuracion": [],
 	"/(protected)/conversaciones": [],
 	"/(protected)/conversaciones/[id]": [],

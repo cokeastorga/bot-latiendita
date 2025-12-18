@@ -285,7 +285,7 @@ export async function processMessage(ctx: BotContext): Promise<BotResponse> {
   }
 
   return {
-    reply: 'No entendí tu opción. Escribe "Inicio" para ver el menú.',
+    reply: 'No entendí tu opción. Escribe "Inicio" para volver al menú.',
     intent: { id: 'fallback', confidence: 1, reason: 'fallback' },
     nextState: 'idle',
     meta: { ...ctx.metadata }
