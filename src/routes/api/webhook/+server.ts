@@ -7,7 +7,6 @@ import {
   type BotContext,
   type Channel
 } from '$lib/chatbot/engine';
-import { logConversationEvent } from '$lib/chatbot/store';
 import { db } from '$lib/firebase';
 import {
   doc,
@@ -16,7 +15,8 @@ import {
   updateDoc,
   addDoc,
   collection,
-  serverTimestamp
+  serverTimestamp,
+  query, orderBy, limit, getDocs
 } from 'firebase/firestore';
 
 type HistoryItem = { from: 'user' | 'bot'; text: string; ts: number; };
@@ -29,6 +29,7 @@ type ConversationDoc = {
   createdAt?: unknown;
   updatedAt?: unknown;
   lastMessageAt?: any;
+  unreadCount?: number;
 };
 
 // Verificación del Webhook para Meta
@@ -112,6 +113,58 @@ export const POST: RequestHandler = async ({ request }) => {
       previousState, metadata: { ...previousMetadata, history, settings }
     };
 
+    // -----------------------------------------------------------------------
+    // 🛑 LÓGICA DE PAUSA (VERSIÓN SEGURA - SIN INDICES COMPLEJOS)
+    // -----------------------------------------------------------------------
+    const PAUSE_DURATION_MS = 30 * 60 * 1000; // 30 Minutos
+    
+    // Obtenemos los últimos 15 mensajes (Solo ordenados por fecha, esto SIEMPRE funciona)
+    const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+    const qLast = query(
+      messagesRef, 
+      orderBy('createdAt', 'desc'), 
+      limit(15) 
+    );
+    
+    const snapshots = await getDocs(qLast);
+    
+    // Filtramos en memoria para encontrar el último de 'staff'
+    const lastStaffMsg = snapshots.docs
+        .map(d => d.data())
+        .find(msg => msg.from === 'staff');
+    
+    if (lastStaffMsg) {
+      const lastStaffTime = lastStaffMsg.createdAt?.toMillis 
+        ? lastStaffMsg.createdAt.toMillis() 
+        : Date.now();
+        
+      const timeSinceStaff = Date.now() - lastStaffTime;
+
+      if (timeSinceStaff < PAUSE_DURATION_MS) {
+        console.log(`[Webhook] ⏸️ Conversación pausada. Staff respondió hace ${Math.round(timeSinceStaff/60000)} min.`);
+        
+        await addDoc(messagesRef, {
+            from: 'user',
+            direction: 'in',
+            text: text,
+            createdAt: serverTimestamp(),
+            paused: true
+        });
+        
+        await updateDoc(convRef, {
+            lastMessageAt: serverTimestamp(),
+            lastMessageText: text,
+            unreadCount: (convData.unreadCount || 0) + 1
+        });
+
+        return json({ ok: true, ignored: 'paused_by_human' });
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // PROCESAMIENTO NORMAL DEL BOT
+    // -----------------------------------------------------------------------
+
     const botResponse = await processMessage(ctx);
 
     // 4. ACTUALIZACIÓN DEL DOCUMENTO PRINCIPAL
@@ -134,23 +187,21 @@ export const POST: RequestHandler = async ({ request }) => {
       status: botResponse.needsHuman ? 'pending' : 'open'
     });
 
-    // 5. REGISTRO EN SUBCOLECCIÓN "MESSAGES" (Para tiempo real en el Panel)
-    const messagesSubRef = collection(db, 'conversations', conversationId, 'messages');
-
-    // Guardar el mensaje del usuario
-    await addDoc(messagesSubRef, {
+    // 5. REGISTRO EN SUBCOLECCIÓN "MESSAGES"
+    // Usuario
+    await addDoc(messagesRef, {
       from: 'user',
       direction: 'in',
       text: text,
       createdAt: serverTimestamp()
     });
 
-    // Guardar la respuesta del bot
-    await addDoc(messagesSubRef, {
+    // Bot (Aquí corregí también el guardado del Intent ID)
+    await addDoc(messagesRef, {
       from: 'bot',
       direction: 'out',
       text: botResponse.reply,
-      intentId: botResponse.intentId || null,
+      intentId: botResponse.intent?.id || null, // Corrección: .intent.id en vez de .intentId
       createdAt: serverTimestamp()
     });
 
@@ -164,40 +215,34 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // Enviar imagen si existe
       if (botResponse.media && botResponse.media.length > 0) {
-        try {
-          for (const m of botResponse.media) {
-            if (m.type === 'image') {
-              await fetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  messaging_product: 'whatsapp',
-                  to: fromPhone,
-                  type: 'image',
-                  image: { link: m.url, caption: '' }
-                })
-              });
-            }
+        for (const m of botResponse.media) {
+          if (m.type === 'image') {
+            await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: fromPhone,
+                type: 'image',
+                image: { link: m.url, caption: '' }
+              })
+            }).catch(e => console.error('Error img:', e));
           }
-        } catch (imgErr) {
-          console.error('⚠️ Error enviando imagen:', imgErr);
         }
       }
 
       // Enviar texto o interactivo
-      try {
-        let payload: any = { messaging_product: 'whatsapp', to: fromPhone };
-        if (botResponse.interactive) {
-          payload.type = 'interactive';
-          payload.interactive = botResponse.interactive;
-        } else {
-          payload.type = 'text';
-          payload.text = { body: botResponse.reply };
-        }
-        await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-      } catch (e) {
-        console.error('❌ Error enviando mensaje:', e);
+      const payload: any = { messaging_product: 'whatsapp', to: fromPhone };
+      if (botResponse.interactive) {
+        payload.type = 'interactive';
+        payload.interactive = botResponse.interactive;
+      } else {
+        payload.type = 'text';
+        payload.text = { body: botResponse.reply };
       }
+      
+      await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) })
+        .catch(e => console.error('Error enviando msg:', e));
     }
 
     return json({ ok: true });
